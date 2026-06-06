@@ -1,0 +1,1848 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"/>
+  <title>建て方管理ツール</title>
+  <meta name="apple-mobile-web-app-capable" content="yes"/>
+  <meta name="apple-mobile-web-app-status-bar-style" content="default"/>
+  <meta name="apple-mobile-web-app-title" content="建て方管理"/>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500;700&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    html { overflow-x: hidden; width: 100%; }
+    body { overflow-x: hidden; width: 100%; position: relative; -webkit-overflow-scrolling: touch; }
+    input, select, textarea { font-size: 16px; } /* iOSズーム防止 */
+    body { margin: 0; padding: 0; background: #f7f7f8; font-family: 'Noto Sans JP', 'Hiragino Sans', sans-serif; font-weight: 300; overflow-x: hidden; width: 100%; }
+    #root { max-width: 430px; width: 100%; margin: 0 auto; min-height: 100vh; overflow-x: hidden; }
+    select, input, button, textarea { font-family: inherit; }
+    @keyframes shake { 0%,100%{transform:translateX(0)} 20%,60%{transform:translateX(-8px)} 40%,80%{transform:translateX(8px)} }
+    @keyframes fadeIn { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
+  </style>
+</head>
+<body>
+<div id="root"></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
+<script type="text/babel">
+const { useState, useEffect, useRef, useCallback } = React;
+
+// ── 定数 ──────────────────────────────────────────
+const DEFAULT_VENDORS = ["なんていい日だなぁ", "一柳重機", "kmax"];
+const PALETTE_COLORS = ["#3b6fd4","#2d9e6b","#d44f3b","#8e44ad","#e67e22","#16a085","#c0392b","#2980b9"];
+const PALETTE_BGS    = ["#eef3fc","#edf7f2","#fceeed","#f5eef8","#fdf2e9","#e8f8f5","#fdedec","#ebf5fb"];
+const KOUTEI_OPTIONS = ["","コラム建て","建て方１日目","建て方２日目","建て方３日目","建て方１日目（手起こし）","建て方２日目（手起こし）","建て方３日目（手起こし）","その他"];
+const TSUBO_OPTIONS = ["","30坪未満","30坪","35坪","40坪","45坪","50坪","55坪","60坪","65坪","70坪","75坪","80坪","85坪","90坪","95坪","100坪","100坪以上"];
+const PRICE_CATEGORIES_DEFAULT = ["コラム", "建て方", "１日", "ハーフ"];
+const MANAGER_PASS = "0228";
+const GYOMU_PASS = "0228";
+const API_KEY = "$2a$10$1O88cF7wXbf2pSTZZxqBr.uqcIg5ILcQf9fGrbZmJyf780h0jIqq.";
+const JSONBIN_BASE = "https://api.jsonbin.io/v3";
+const STORAGE_KEY = "荷揚げv6";
+const PRICE_CAT_KEY = "荷揚げ_vendorPriceCategories";
+function loadVendorPriceCategories() {
+  try { const r = localStorage.getItem(PRICE_CAT_KEY); return r ? JSON.parse(r) : {}; }
+  catch { return {}; }
+}
+function saveVendorPriceCategories(c) { localStorage.setItem(PRICE_CAT_KEY, JSON.stringify(c)); }
+function getVendorCategories(vpcMap, vendorName) {
+  return vpcMap[vendorName] || [...PRICE_CATEGORIES_DEFAULT];
+}
+const VENDOR_PASSES_KEY = "荷揚げ_vendorPasses";
+
+function loadVendorPasses() {
+  try { const r = localStorage.getItem(VENDOR_PASSES_KEY); return r ? JSON.parse(r) : {}; }
+  catch { return {}; }
+}
+function saveVendorPasses(p) { localStorage.setItem(VENDOR_PASSES_KEY, JSON.stringify(p)); }
+function getVendorPass(passes, vendorName) { return passes[vendorName] || "0000"; }
+const BIN_STORAGE_KEY = "荷揚げ_binid";
+const DEFAULT_BIN_ID = "6a23a553f5f4af5e29c12fb2";
+const VENDORS_STORAGE_KEY = "荷揚げ_vendors";
+const NAMES_STORAGE_KEY = "荷揚げ_names";
+
+// ── JSONBin API ───────────────────────────────────
+async function fetchBin(binId) {
+  const res = await fetch(`${JSONBIN_BASE}/b/${binId}/latest`, { headers: { "X-Master-Key": API_KEY } });
+  if (!res.ok) throw new Error("fetch failed");
+  return (await res.json()).record;
+}
+async function updateBin(binId, data) {
+  const res = await fetch(`${JSONBIN_BASE}/b/${binId}`, {
+    method: "PUT", headers: { "Content-Type": "application/json", "X-Master-Key": API_KEY },
+    body: JSON.stringify(data)
+  });
+  if (!res.ok) throw new Error("update failed");
+}
+async function createBin(data) {
+  const res = await fetch(`${JSONBIN_BASE}/b`, {
+    method: "POST", headers: { "Content-Type": "application/json", "X-Master-Key": API_KEY, "X-Bin-Name": "荷揚げ管理" },
+    body: JSON.stringify(data)
+  });
+  if (!res.ok) throw new Error("create failed");
+  return (await res.json()).metadata.id;
+}
+
+// ── ローカルストレージ ────────────────────────────
+const DEFAULT_VENDOR_MEMBERS = {
+  "なんていい日だなぁ": ["中澤","松岡","畑澤","丹羽","トルシン","松浦"],
+  "一柳重機": ["榊原","近藤"],
+  "kmax": []
+};
+
+function loadLocal() {
+  try {
+    const r = localStorage.getItem(STORAGE_KEY);
+    if(r) {
+      const parsed = JSON.parse(r);
+      // vendorMembersが空なら初期値を設定
+      if(!parsed.vendorMembers || Object.keys(parsed.vendorMembers).length === 0) {
+        parsed.vendorMembers = DEFAULT_VENDOR_MEMBERS;
+      }
+      return parsed;
+    }
+    return { requests:[], assignments:{}, vendorMembers:DEFAULT_VENDOR_MEMBERS, vendorSchedules:{}, unitPrices:{}, orders:[] };
+  } catch { return { requests:[], assignments:{}, vendorMembers:DEFAULT_VENDOR_MEMBERS, vendorSchedules:{}, unitPrices:{}, orders:[] }; }
+}
+function saveLocal(d) { localStorage.setItem(STORAGE_KEY, JSON.stringify(d)); }
+function loadVendors() {
+  try { const r = localStorage.getItem(VENDORS_STORAGE_KEY); return r ? JSON.parse(r) : DEFAULT_VENDORS; }
+  catch { return DEFAULT_VENDORS; }
+}
+function saveVendors(v) { localStorage.setItem(VENDORS_STORAGE_KEY, JSON.stringify(v)); }
+function loadNames() {
+  try { const r = localStorage.getItem(NAMES_STORAGE_KEY); return r ? JSON.parse(r) : []; }
+  catch { return []; }
+}
+function saveNames(n) { localStorage.setItem(NAMES_STORAGE_KEY, JSON.stringify(n)); }
+
+// ── ユーティリティ ────────────────────────────────
+function today() { return new Date().toISOString().slice(0,10); }
+function daysInMonth(ym) { const [y,m]=ym.split("-").map(Number); return new Date(y,m,0).getDate(); }
+function dayOfWeek(s) { return ["日","月","火","水","木","金","土"][new Date(s).getDay()]; }
+function weekdayIdx(s) { return new Date(s).getDay(); }
+function isPast(ds) { return ds < today(); }
+function vendorColor(v,vendors) { const i=vendors.indexOf(v); return i>=0?PALETTE_COLORS[i%PALETTE_COLORS.length]:"#8e8e93"; }
+function vendorBg(v,vendors) { const i=vendors.indexOf(v); return i>=0?PALETTE_BGS[i%PALETTE_BGS.length]:"#f2f2f7"; }
+function formatDate(ds) { return ds ? `${ds.slice(5,7)}/${ds.slice(8,10)}` : ""; }
+function addDays(ds, n) {
+  const d = new Date(ds); d.setDate(d.getDate()+n);
+  return d.toISOString().slice(0,10);
+}
+function getWeekRange(offset=0) {
+  const d = new Date(today());
+  const dow = d.getDay();
+  const mon = new Date(d); mon.setDate(d.getDate()-dow+1+(offset*7));
+  const sun = new Date(mon); sun.setDate(mon.getDate()+6);
+  return { start: mon.toISOString().slice(0,10), end: sun.toISOString().slice(0,10) };
+}
+
+// ── PinPad ──────────────────────────────────────
+function PinPad({ title, onSuccess, onCancel }) {
+  const [pins, setPins] = useState(["","","",""]);
+  const [shake, setShake] = useState(false);
+  const handleDigit = (digit) => {
+    const idx = pins.findIndex(p=>p==="");
+    if(idx===-1) return;
+    const next=[...pins]; next[idx]=digit; setPins(next);
+    if(idx===3) {
+      const code=[...next].join("");
+      setTimeout(()=>{
+        if(code===MANAGER_PASS) { onSuccess(); }
+        else { setShake(true); setTimeout(()=>{ setPins(["","","",""]); setShake(false); },600); }
+      },150);
+    }
+  };
+  const handleDelete = () => {
+    const last=[...pins].map((p,i)=>p!==""?i:-1).filter(i=>i!==-1).pop();
+    if(last===undefined) return;
+    const next=[...pins]; next[last]=""; setPins(next);
+  };
+  return (
+    <div style={S.pinOverlay}>
+      <div style={S.pinSheet}>
+        <div style={S.pinIcon}>🔒</div>
+        <div style={S.pinTitle}>{title||"ログイン"}</div>
+        <div style={S.pinSub}>4桁のパスワードを入力</div>
+        <div style={{...S.pinDots, animation:shake?"shake 0.4s ease":"none"}}>
+          {pins.map((p,i)=>(
+            <div key={i} style={{...S.pinDot, background:p!==""?"#1c1c1e":"transparent", border:`2px solid ${p!==""?"#1c1c1e":"#c7c7cc"}`}}/>
+          ))}
+        </div>
+        <div style={S.pinKeypad}>
+          {["1","2","3","4","5","6","7","8","9","","0","⌫"].map((k,i)=>(
+            <button key={i} style={{...S.pinKey,...(k===""?S.pinKeyEmpty:{})}}
+              onClick={()=>{ if(k==="⌫") handleDelete(); else if(k!=="") handleDigit(k); }}>
+              {k}
+            </button>
+          ))}
+        </div>
+        {onCancel&&<button style={S.pinCancel} onClick={onCancel}>キャンセル</button>}
+      </div>
+    </div>
+  );
+}
+
+// ── 業者用PinPad ────────────────────────────────
+function PinPadVendor({ vendorName, correctPass, onSuccess, onCancel }) {
+  const [pins, setPins] = useState(["","","",""]);
+  const [shake, setShake] = useState(false);
+  const handleDigit = (digit) => {
+    const idx = pins.findIndex(p=>p==="");
+    if(idx===-1) return;
+    const next=[...pins]; next[idx]=digit; setPins(next);
+    if(idx===3) {
+      const code=[...next].join("");
+      setTimeout(()=>{
+        if(code===correctPass) { onSuccess(); }
+        else { setShake(true); setTimeout(()=>{ setPins(["","","",""]); setShake(false); },600); }
+      },150);
+    }
+  };
+  const handleDelete = () => {
+    const last=[...pins].map((p,i)=>p!==""?i:-1).filter(i=>i!==-1).pop();
+    if(last===undefined) return;
+    const next=[...pins]; next[last]=""; setPins(next);
+  };
+  return (
+    <div style={S.pinOverlay}>
+      <div style={S.pinSheet}>
+        <div style={S.pinIcon}>🏢</div>
+        <div style={S.pinTitle}>{vendorName}</div>
+        <div style={S.pinSub}>4桁のパスワードを入力</div>
+        <div style={{...S.pinDots, animation:shake?"shake 0.4s ease":"none"}}>
+          {pins.map((p,i)=>(
+            <div key={i} style={{...S.pinDot, background:p!==""?"#1c1c1e":"transparent", border:`2px solid ${p!==""?"#1c1c1e":"#c7c7cc"}`}}/>
+          ))}
+        </div>
+        <div style={S.pinKeypad}>
+          {["1","2","3","4","5","6","7","8","9","","0","⌫"].map((k,i)=>(
+            <button key={i} style={{...S.pinKey,...(k===""?S.pinKeyEmpty:{})}}
+              onClick={()=>{ if(k==="⌫") handleDelete(); else if(k!=="") handleDigit(k); }}>
+              {k}
+            </button>
+          ))}
+        </div>
+        <button style={S.pinCancel} onClick={onCancel}>戻る</button>
+      </div>
+    </div>
+  );
+}
+
+// ── 業者パスワード設定UI ─────────────────────────
+function VendorPassSetting({ vendorName, currentPass, onSave }) {
+  const [editing, setEditing] = useState(false);
+  const [newPass, setNewPass] = useState("");
+  const [err, setErr] = useState("");
+  const handleSave = () => {
+    if(newPass.length!==4||!/^\d{4}$/.test(newPass)){ setErr("4桁の数字で入力してください"); return; }
+    onSave(newPass); setNewPass(""); setEditing(false); setErr("");
+  };
+  return (
+    <div style={{marginTop:8,paddingTop:8,borderTop:"0.5px solid #f2f2f7"}}>
+      {!editing ? (
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+          <span style={{fontSize:11,color:"#8e8e93"}}>🔐 パスワード：{"●".repeat(currentPass.length)}</span>
+          <button style={{fontSize:11,color:"#007aff",background:"none",border:"none",cursor:"pointer",padding:"2px 6px"}} onClick={()=>setEditing(true)}>変更</button>
+        </div>
+      ) : (
+        <div>
+          <div style={{display:"flex",gap:8,alignItems:"center"}}>
+            <input style={{...S.formInput,flex:1,fontSize:14,letterSpacing:4}} type="number" maxLength={4}
+              value={newPass} onChange={e=>{ setNewPass(e.target.value.slice(0,4)); setErr(""); }}
+              placeholder="新しいPIN（4桁）"/>
+            <button style={S.btnPrimary} onClick={handleSave}>保存</button>
+            <button style={S.btnGhost} onClick={()=>{ setEditing(false); setNewPass(""); setErr(""); }}>×</button>
+          </div>
+          {err&&<div style={{fontSize:11,color:"#ff3b30",marginTop:4}}>{err}</div>}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── メンバー割当カード（業者モード用）────────────────
+function MemberAssignCard({ r, a, vendorId, vendors, vendorMembers, onDelete, onSave, initialSelected }) {
+  const [editing, setEditing] = useState(false);
+  const [selected, setSelected] = useState(initialSelected||[]);
+  const [, forceUpdate] = useState(0);
+
+  // initialSelectedが変わったら同期
+  useEffect(()=>{ if(initialSelected) setSelected(initialSelected); },[JSON.stringify(initialSelected)]);
+
+  const toggleMember = (m) => {
+    setSelected(prev => {
+      const next = prev.includes(m) ? prev.filter(x=>x!==m) : [...prev, m];
+      return next;
+    });
+    forceUpdate(n => n+1);
+  };
+
+  return (
+    <div style={{...S.reqCard, borderLeftColor:vendorColor(vendorId,vendors), maxWidth:"100%", boxSizing:"border-box", overflow:"hidden"}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
+        <div style={{flex:1}}>
+          <div style={{fontSize:12,color:"#8e8e93",marginBottom:2}}>📋 管理者より</div>
+          <div style={S.reqName}>{r.bukken||"物件名未入力"}</div>
+          {r.koutei&&<div style={S.kouteiChip}>{r.koutei}</div>}
+          <div style={S.reqMeta}>👷 {a[vendorId]}人{r.tsubo?`　${r.tsubo}`:""}{r.floors?`　${r.floors}階`:""}</div>
+          {r.note&&<div style={S.reqNote}>{r.note}</div>}
+        </div>
+        <button style={S.delBtn} onClick={onDelete}>✕</button>
+      </div>
+
+      {/* 割当済みメンバー表示 */}
+      {!editing && (
+        <div>
+          {selected.length > 0 ? (
+            <div style={{marginTop:6}}>
+              <div style={{fontSize:11,color:"#8e8e93",marginBottom:4}}>👥 担当メンバー</div>
+              <div style={{display:"flex",flexWrap:"wrap",gap:4,marginBottom:6}}>
+                {selected.map(m=>(
+                  <span key={m} style={{fontSize:12,padding:"3px 10px",borderRadius:6,background:"#eef3fc",color:"#3b6fd4",fontWeight:600}}>
+                    {m}
+                  </span>
+                ))}
+              </div>
+              <button style={{...S.btnAssign,fontSize:11}} onClick={()=>setEditing(true)}>✏️ メンバーを変更</button>
+            </div>
+          ) : (
+            <button style={S.btnAssign} onClick={()=>{ setEditing(true); setSelected([]); }}>
+              👤 メンバーを割り当てる
+            </button>
+          )}
+        </div>
+      )}
+      {editing && (
+        <div style={S.splitPanel}>
+          <div style={S.splitHint}>担当メンバーを選択（複数可）</div>
+          {vendorMembers.length===0&&(
+            <div style={{fontSize:12,color:"#aeaeb2",marginBottom:8}}>メンバータブから登録してください。</div>
+          )}
+          <div style={{display:"flex",flexWrap:"wrap",gap:8,marginBottom:10,width:"100%"}}>
+            {vendorMembers.map(m=>{
+              const isSel = selected.includes(m);
+              return (
+                <div key={m}
+                  onClick={()=>toggleMember(m)}
+                  style={{fontSize:12,padding:"6px 10px",borderRadius:7,
+                    border:`2px solid ${isSel?"#007aff":"#e5e5ea"}`,
+                    background:isSel?"#007aff":"#fff",
+                    color:isSel?"#fff":"#1c1c1e",
+                    cursor:"pointer",userSelect:"none",
+                    fontWeight:isSel?600:400,
+                    boxSizing:"border-box"}}>
+                  {isSel?"✓ ":""}{m}
+                </div>
+              );
+            })}
+          </div>
+          {selected.length>0&&(
+            <div style={{fontSize:12,color:"#007aff",marginBottom:8,fontWeight:600}}>
+              選択中（{selected.length}名）：{selected.join("、")}
+            </div>
+          )}
+          <div style={{display:"flex",gap:8}}>
+            <button style={S.btnPrimary} onClick={()=>{ onSave(r.id,selected); setEditing(false); }}>確定</button>
+            <button style={S.btnGhost} onClick={()=>{ setEditing(false); }}>キャンセル</button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── カレンダーコンポーネント ──────────────────────
+function CalendarView({ currentYM, setCurrentYM, requestsByDate, assignments, vendors, role, vendorId, vendorSchedules, onDayTap, onAddSchedule, onDeleteSchedule, onDeleteRequest, renderSplitUI, renderDiscloseBtn, vendorMembers, onSaveMemberAssign, onEditRequest, renderChangeStatus, highlightDates, memberAssignments }) {
+  const days = daysInMonth(currentYM);
+  const firstDay = new Date(currentYM+"-01").getDay();
+  const [selDate, setSelDate] = useState(null);
+
+  const prevM=()=>{ const d=new Date(currentYM+"-01"); d.setMonth(d.getMonth()-1); setCurrentYM(d.toISOString().slice(0,7)); setSelDate(null); };
+  const nextM=()=>{ const d=new Date(currentYM+"-01"); d.setMonth(d.getMonth()+2); d.setDate(0); setCurrentYM(d.toISOString().slice(0,7)); setSelDate(null); };
+
+  const dateReqs = selDate ? (requestsByDate[selDate]||[]) : [];
+  const vendorScheds = (vendorId && selDate) ? ((vendorSchedules[vendorId]||[]).filter(s=>s.date===selDate)) : [];
+
+  return (
+    <div>
+      <div style={S.calNav}>
+        <button style={S.calNavBtn} onClick={prevM}>‹</button>
+        <span style={S.calNavTitle}>{currentYM.replace("-","年")}月</span>
+        <button style={S.calNavBtn} onClick={nextM}>›</button>
+      </div>
+      <div style={S.calGrid}>
+        {["日","月","火","水","木","金","土"].map(d=>(
+          <div key={d} style={{...S.calDow,color:d==="日"?"#ff3b30":d==="土"?"#007aff":"#8e8e93"}}>{d}</div>
+        ))}
+        {Array.from({length:firstDay}).map((_,i)=><div key={"e"+i}/>)}
+        {Array.from({length:days}).map((_,i)=>{
+          const ds=`${currentYM}-${String(i+1).padStart(2,"0")}`;
+          const reqs=requestsByDate[ds]||[];
+          const vscheds=vendorId?(vendorSchedules[vendorId]||[]).filter(s=>s.date===ds):[];
+          const total=reqs.reduce((s,r)=>s+r.count,0);
+          const isT=ds===today(); const isSel=ds===selDate;
+          const past=isPast(ds); const wi=weekdayIdx(ds);
+          // 業者モードでは開示済みのみ表示
+          const visibleReqs = vendorId ? reqs.filter(r=>{ const a=assignments[r.id]; return a&&a[vendorId]&&r.disclosed; }) : reqs;
+          return (
+            <button key={ds}
+              style={{...S.calCell,...(isT?S.calCellToday:{}),...(isSel?S.calCellSel:{}),...(past&&!isT?S.calCellPast:{}),...(highlightDates&&highlightDates.includes(ds)?S.calCellHighlight:{})}}
+              onClick={()=>{ setSelDate(isSel?null:ds); if(onDayTap) onDayTap(ds, visibleReqs.length===0); }}>
+              <span style={{...S.calNum, background:isT?"#1a1a1a":"transparent",
+                color:past&&!isT?"#c7c7cc":isT?"#fff":wi===0?"#ff3b30":wi===6?"#007aff":"#1c1c1e"}}>
+                {i+1}
+              </span>
+              {(visibleReqs.length>0||vscheds.length>0)&&(
+                <div style={{...S.calCount,opacity:past?0.5:1}}>
+                  {visibleReqs.length>0&&<span style={{fontSize:8}}>●</span>}
+                  {vscheds.length>0&&<span style={{fontSize:7,marginLeft:2}}>📌</span>}
+                </div>
+              )}
+              <div style={{display:"flex",flexWrap:"wrap",gap:1,justifyContent:"center",marginTop:1}}>
+                {visibleReqs.map(r=>{ const a=assignments[r.id];
+                  const color = vendorId ? vendorColor(vendorId,vendors) : (a?vendorColor(Object.keys(a)[0],vendors):"#c7c7cc");
+                  return <div key={r.id} style={{...S.calDot,background:past?"#ccc":color}}/>;
+                })}
+                {vscheds.map(s=><div key={s.id} style={{...S.calDot,background:"#ff9500"}}/>)}
+              </div>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* 選択日詳細 */}
+      {selDate&&(
+        <div style={S.detailCard}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10,paddingBottom:8,borderBottom:"0.5px solid #f2f2f7"}}>
+            <div style={S.detailTitle}>{selDate}（{dayOfWeek(selDate)}）</div>
+            {vendorId&&!isPast(selDate)&&(
+              <button style={S.addDayBtn} onClick={()=>onAddSchedule&&onAddSchedule(selDate)}>＋ 予定追加</button>
+            )}
+            {role==="担当者"&&!isPast(selDate)&&!vendorId&&(
+              <button style={S.addDayBtn} onClick={()=>onDayTap&&onDayTap(selDate,true)}>＋ 追加</button>
+            )}
+          </div>
+
+          {/* 業者モード：開示済み案件 */}
+          {vendorId&&dateReqs.filter(r=>{ const a=assignments[r.id]; return a&&a[vendorId]&&r.disclosed; }).map(r=>{
+            const a=assignments[r.id];
+            return (
+              <MemberAssignCard
+                key={r.id}
+                r={r} a={a} vendorId={vendorId} vendors={vendors}
+                vendorMembers={vendorMembers||[]}
+                initialSelected={memberAssignments&&memberAssignments[r.id]?(memberAssignments[r.id][vendorId]||[]):[]}
+                onDelete={()=>onDeleteRequest&&onDeleteRequest(r.id)}
+                onSave={(reqId,members)=>onSaveMemberAssign&&onSaveMemberAssign(reqId,members)}/>
+            );
+          })}
+
+          {/* 業者モード：独自スケジュール */}
+          {vendorId&&vendorScheds.map(s=>(
+            <div key={s.id} style={{...S.reqCard,borderLeftColor:"#ff9500"}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
+                <div style={{flex:1}}>
+                  <div style={{fontSize:12,color:"#ff9500",marginBottom:2}}>📌 自社スケジュール</div>
+                  <div style={S.reqName}>{s.title}</div>
+                  {s.member&&<div style={S.reqMeta}>👤 {s.member}</div>}
+                  {s.note&&<div style={S.reqNote}>{s.note}</div>}
+                </div>
+                <button style={S.delBtn} onClick={()=>onDeleteSchedule&&onDeleteSchedule(vendorId,s.id)}>✕</button>
+              </div>
+            </div>
+          ))}
+
+          {/* 担当者・管理者モード */}
+          {!vendorId&&dateReqs.map(r=>{
+            const a=assignments[r.id];
+            const fc=a?vendorColor(Object.keys(a)[0],vendors):"#c7c7cc";
+            return (
+              <div key={r.id} style={{...S.reqCard,borderLeftColor:fc}}>
+                <div style={S.reqName}>{r.name}</div>
+                {r.bukken&&<div style={S.bukken}>🏠 {r.bukken}</div>}
+                {r.koutei&&<div style={S.kouteiChip}>{r.koutei}</div>}
+                <div style={S.reqMeta}>👷 {r.count}人{r.tsubo?`　${r.tsubo}`:""}{r.floors?`　${r.floors}階`:""}</div>
+                {r.daiku&&<div style={{fontSize:11,color:"#8e8e93",marginTop:2}}>大工：{r.daiku}</div>}
+                {r.rekkaa&&<div style={{fontSize:11,color:"#8e8e93",marginTop:2}}>レッカー：{r.rekkaa}</div>}
+                {r.note&&<div style={S.reqNote}>{r.note}</div>}
+                {r.annaizu&&<img src={r.annaizu} style={{maxWidth:"100%",borderRadius:6,marginTop:6,border:"1px solid #eeeeee"}}/>}
+                <div style={{...S.chipRow,justifyContent:"space-between"}}>
+                  <div style={S.chipRow}>
+                    {a ? Object.entries(a).map(([v,c])=>(
+                      <span key={v} style={{...S.pill,background:vendorBg(v,vendors),color:vendorColor(v,vendors),fontWeight:600}}>{v} {c}人</span>
+                    )) : <span style={S.pill}>未割当</span>}
+                    {r.disclosed&&<span style={S.disclosedChip}>開示済</span>}
+                  </div>
+                  {(role==="担当者"||role==="管理者"||role==="業者")&&<button style={S.delBtn} onClick={()=>onDeleteRequest&&onDeleteRequest(r.id)}>✕</button>}
+                </div>
+                {role==="管理者"&&renderSplitUI&&renderSplitUI(r)}
+                {role==="管理者"&&renderDiscloseBtn&&renderDiscloseBtn(r)}
+                {renderChangeStatus&&renderChangeStatus(r)}
+                {/* 業者のメンバー割当表示 */}
+                {memberAssignments&&a&&Object.keys(a).map(vid=>{
+                  const members=(memberAssignments[r.id]||{})[vid];
+                  if(!members||members.length===0) return null;
+                  return (
+                    <div key={vid} style={{marginTop:5}}>
+                      <div style={{fontSize:11,color:"#8e8e93",marginBottom:3}}>👥 {vid} 担当</div>
+                      <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
+                        {members.map(m=>(
+                          <span key={m} style={{fontSize:11,padding:"2px 8px",borderRadius:5,background:"#eef3fc",color:"#3b6fd4",fontWeight:600}}>{m}</span>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })}
+                {onEditRequest&&(
+                  <button style={S.btnAssign} onClick={()=>onEditRequest(r)}>✏️ 編集</button>
+                )}
+              </div>
+            );
+          })}
+
+          {!vendorId&&dateReqs.length===0&&<div style={S.empty}>予定なし</div>}
+          {vendorId&&dateReqs.filter(r=>{ const a=assignments[r.id]; return a&&a[vendorId]&&r.disclosed; }).length===0&&vendorScheds.length===0&&(
+            <div style={S.empty}>予定なし</div>
+          )}
+        </div>
+      )}
+
+      {/* 凡例 */}
+      <div style={S.legend}>
+        {vendors.map(v=>(<span key={v} style={S.legendItem}><span style={{...S.calDot,background:vendorColor(v,vendors),display:"inline-block"}}/>{v}</span>))}
+        <span style={S.legendItem}><span style={{...S.calDot,background:"#c7c7cc",display:"inline-block"}}/>未割当</span>
+        {vendorId&&<span style={S.legendItem}><span style={{...S.calDot,background:"#ff9500",display:"inline-block"}}/>自社予定</span>}
+      </div>
+    </div>
+  );
+}
+
+// ── 予定登録フォーム ──────────────────────────────
+function RegisterForm({ initialDate, vendors, names, onSave, onCancel, syncing }) {
+  const [form, setForm] = useState({ name:names[0]||"", bukken:"", date:initialDate||today(), koutei:"", count:"", tsubo:"", floors:"", note:"" });
+  const [nameInput, setNameInput] = useState(names[0]||"");
+  const [showNameDrop, setShowNameDrop] = useState(false);
+  const handleSave = () => {
+    if(!form.name||!form.date||!form.count) return;
+    const newNames=[form.name,...names.filter(n=>n!==form.name)].slice(0,20);
+    saveNames(newNames);
+    onSave({...form, count:Number(form.count)});
+  };
+  return (
+    <div style={S.formCard}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+        <div style={S.formTitle}>予定を登録</div>
+        {onCancel&&<button style={S.closeBtn} onClick={onCancel}>✕</button>}
+      </div>
+      <div style={S.formRow}>
+        <label style={S.formLabel}>担当者名 <span style={{color:"#ff3b30"}}>*</span></label>
+        <div style={{position:"relative"}}>
+          <input style={S.formInput} value={nameInput}
+            onChange={e=>{ setNameInput(e.target.value); setForm(f=>({...f,name:e.target.value})); }}
+            onFocus={()=>setShowNameDrop(true)} placeholder="名前を入力または選択"/>
+          {showNameDrop&&names.length>0&&(
+            <div style={S.nameDrop}>
+              {names.map(n=>(<div key={n} style={S.nameDropItem} onClick={()=>{ setNameInput(n); setForm(f=>({...f,name:n})); setShowNameDrop(false); }}>{n}</div>))}
+              <div style={S.nameDropClose} onClick={()=>setShowNameDrop(false)}>閉じる</div>
+            </div>
+          )}
+        </div>
+      </div>
+      <div style={S.formRow}>
+        <label style={S.formLabel}>物件名</label>
+        <input style={S.formInput} value={form.bukken} onChange={e=>setForm(f=>({...f,bukken:e.target.value}))} placeholder="フルネームで入力してください（ひらがなでも可）"/>
+        <div style={S.formHint}>※ 物件名はフルネームで入力してください（ひらがなでも可）</div>
+      </div>
+      <div style={S.formRow}>
+        <label style={S.formLabel}>工程</label>
+        <select style={S.formInput} value={form.koutei} onChange={e=>setForm(f=>({...f,koutei:e.target.value}))}>
+          {KOUTEI_OPTIONS.map(o=><option key={o} value={o}>{o||"─ 選択してください ─"}</option>)}
+        </select>
+      </div>
+      <div style={S.formRow}>
+        <label style={S.formLabel}>大工名</label>
+        <div style={{display:"flex",gap:6,marginBottom:4}}>
+          <button type="button"
+            style={{fontSize:11,padding:"4px 10px",borderRadius:5,border:`1px solid ${!form.daikuMode||form.daikuMode==="input"?"#1a1a1a":"#eeeeee"}`,background:!form.daikuMode||form.daikuMode==="input"?"#1a1a1a":"#fff",color:!form.daikuMode||form.daikuMode==="input"?"#fff":"#888",cursor:"pointer"}}
+            onClick={()=>setForm(f=>({...f,daikuMode:"input",daiku:""}))}>手入力</button>
+          <button type="button"
+            style={{fontSize:11,padding:"4px 10px",borderRadius:5,border:`1px solid ${form.daikuMode==="미정"?"#1a1a1a":"#eeeeee"}`,background:form.daikuMode==="미정"?"#1a1a1a":"#fff",color:form.daikuMode==="미정"?"#fff":"#888",cursor:"pointer"}}
+            onClick={()=>setForm(f=>({...f,daikuMode:"미정",daiku:"未確定"}))}>未確定</button>
+        </div>
+        {(!form.daikuMode||form.daikuMode==="input")&&(
+          <input style={S.formInput} value={form.daiku||""} onChange={e=>setForm(f=>({...f,daiku:e.target.value}))} placeholder="大工名を入力"/>
+        )}
+        {form.daikuMode==="미정"&&(
+          <div style={{padding:"8px 11px",borderRadius:6,border:"1px solid #eeeeee",background:"#f5f5f5",fontSize:14,color:"#888"}}>未確定</div>
+        )}
+      </div>
+      <div style={S.formRow}>
+        <label style={S.formLabel}>日付 <span style={{color:"#ff3b30"}}>*</span></label>
+        <input style={S.formInput} type="date" value={form.date} onChange={e=>setForm(f=>({...f,date:e.target.value}))}/>
+      </div>
+      <div style={S.formRow}>
+        <label style={S.formLabel}>人数 <span style={{color:"#ff3b30"}}>*</span></label>
+        <input style={S.formInput} type="number" min={1} max={30} value={form.count} onChange={e=>setForm(f=>({...f,count:e.target.value}))}/>
+      </div>
+      <div style={S.formRow}>
+        <label style={S.formLabel}>おおよその坪数</label>
+        <select style={S.formInput} value={form.tsubo} onChange={e=>setForm(f=>({...f,tsubo:e.target.value}))}>
+          {TSUBO_OPTIONS.map(o=><option key={o} value={o}>{o||"─ 選択してください ─"}</option>)}
+        </select>
+      </div>
+      <div style={S.formRow}>
+        <label style={S.formLabel}>階数</label>
+        <input style={S.formInput} type="number" value={form.floors} onChange={e=>setForm(f=>({...f,floors:e.target.value}))} placeholder="例：2"/>
+      </div>
+      <div style={S.formRow}>
+        <label style={S.formLabel}>レッカー</label>
+        <select style={S.formInput} value={form.rekkaa||""} onChange={e=>setForm(f=>({...f,rekkaa:e.target.value}))}>
+          <option value="">─ 選択してください ─</option>
+          <option value="あり">あり</option>
+          <option value="なし">なし</option>
+        </select>
+      </div>
+      <div style={S.formRow}>
+        <label style={S.formLabel}>備考</label>
+        <input style={S.formInput} value={form.note} onChange={e=>setForm(f=>({...f,note:e.target.value}))} placeholder="メモ"/>
+      </div>
+      <div style={S.formRow}>
+        <label style={S.formLabel}>案内図（PNG/JPG・1枚）</label>
+        <div style={{border:"1.5px dashed #dddddd",borderRadius:8,padding:"16px",textAlign:"center",background:"#fafafa",cursor:"pointer",position:"relative"}}
+          onClick={()=>document.getElementById("annaizu-input").click()}>
+          {form.annaizu ? (
+            <div>
+              <img src={form.annaizu} style={{maxWidth:"100%",maxHeight:200,borderRadius:6,marginBottom:8}}/>
+              <div style={{fontSize:11,color:"#aaa"}}>タップして変更</div>
+            </div>
+          ) : (
+            <div>
+              <div style={{fontSize:24,marginBottom:6}}>+</div>
+              <div style={{fontSize:12,color:"#aaaaaa"}}>タップして画像を選択</div>
+              <div style={{fontSize:10,color:"#cccccc",marginTop:4}}>PNG / JPG（1MB以下推奨）</div>
+            </div>
+          )}
+          <input id="annaizu-input" type="file" accept="image/png,image/jpeg"
+            style={{position:"absolute",opacity:0,width:"100%",height:"100%",top:0,left:0,cursor:"pointer"}}
+            onChange={e=>{
+              const file=e.target.files[0];
+              if(!file) return;
+              if(file.size>2*1024*1024){ alert("ファイルサイズが大きすぎます（2MB以下にしてください）"); return; }
+              const reader=new FileReader();
+              reader.onload=ev=>setForm(f=>({...f,annaizu:ev.target.result}));
+              reader.readAsDataURL(file);
+            }}/>
+        </div>
+        {form.annaizu&&(
+          <button style={{fontSize:11,color:"#ff3b30",background:"none",border:"none",cursor:"pointer",marginTop:4,padding:0}}
+            onClick={()=>setForm(f=>({...f,annaizu:""}))}>画像を削除</button>
+        )}
+      </div>
+      <button style={{...S.btnPrimary,width:"100%",marginTop:16,padding:"14px",fontSize:16,opacity:syncing?0.6:1}} onClick={handleSave} disabled={syncing}>
+        {syncing?"保存中…":"登録する"}
+      </button>
+    </div>
+  );
+}
+
+// ── 予定編集フォーム ─────────────────────────────────
+function EditForm({ request, vendors, names, onSave, onCancel, syncing }) {
+  const [form, setForm] = useState({
+    name: request.name||"",
+    bukken: request.bukken||"",
+    date: request.date||today(),
+    koutei: request.koutei||"",
+    count: request.count||'',
+    tsubo: request.tsubo||"",
+    floors: request.floors||"",
+    note: request.note||""
+  });
+  const handleSave = () => {
+    if(!form.name||!form.date||!form.count) return;
+    onSave(form);
+  };
+  return (
+    <div style={S.formCard}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+        <div style={S.formTitle}>予定を編集</div>
+        <button style={S.closeBtn} onClick={onCancel}>✕</button>
+      </div>
+      <div style={S.formRow}>
+        <label style={S.formLabel}>担当者名 *</label>
+        <input style={S.formInput} value={form.name} onChange={e=>setForm(f=>({...f,name:e.target.value}))}/>
+      </div>
+      <div style={S.formRow}>
+        <label style={S.formLabel}>物件名</label>
+        <input style={S.formInput} value={form.bukken} onChange={e=>setForm(f=>({...f,bukken:e.target.value}))} placeholder="フルネームで入力してください（ひらがなでも可）"/>
+      </div>
+      <div style={S.formRow}>
+        <label style={S.formLabel}>工程</label>
+        <select style={S.formInput} value={form.koutei} onChange={e=>setForm(f=>({...f,koutei:e.target.value}))}>
+          {KOUTEI_OPTIONS.map(o=><option key={o} value={o}>{o||"─ 選択してください ─"}</option>)}
+        </select>
+      </div>
+      <div style={S.formRow}>
+        <label style={S.formLabel}>日付 *</label>
+        <input style={S.formInput} type="date" value={form.date} onChange={e=>setForm(f=>({...f,date:e.target.value}))}/>
+      </div>
+      <div style={S.formRow}>
+        <label style={S.formLabel}>人数 *</label>
+        <input style={S.formInput} type="number" min={1} max={30} value={form.count} onChange={e=>setForm(f=>({...f,count:e.target.value}))}/>
+      </div>
+      <div style={S.formRow}>
+        <label style={S.formLabel}>おおよその坪数</label>
+        <select style={S.formInput} value={form.tsubo} onChange={e=>setForm(f=>({...f,tsubo:e.target.value}))}>
+          {TSUBO_OPTIONS.map(o=><option key={o} value={o}>{o||"─ 選択してください ─"}</option>)}
+        </select>
+      </div>
+      <div style={S.formRow}>
+        <label style={S.formLabel}>階数</label>
+        <input style={S.formInput} type="number" value={form.floors} onChange={e=>setForm(f=>({...f,floors:e.target.value}))} placeholder="例：2"/>
+      </div>
+      <div style={S.formRow}>
+        <label style={S.formLabel}>備考</label>
+        <input style={S.formInput} value={form.note} onChange={e=>setForm(f=>({...f,note:e.target.value}))} placeholder="メモ"/>
+      </div>
+      <button style={{...S.btnPrimary,width:"100%",marginTop:16,padding:"14px",fontSize:16,opacity:syncing?0.6:1}}
+        onClick={handleSave} disabled={syncing}>
+        {syncing?"保存中…":"更新する"}
+      </button>
+    </div>
+  );
+}
+
+// ── メインアプリ ──────────────────────────────────
+function App() {
+  const [data, setData] = useState(loadLocal);
+  const [vendors, setVendors] = useState(loadVendors);
+  const [names, setNames] = useState(loadNames);
+  const [role, setRole] = useState(null); // null | "担当者" | "管理者" | "業者" | "業務"
+  const [showPin, setShowPin] = useState(null); // null | "管理者" | "業務"
+  const [vendorId, setVendorId] = useState(null); // 業者モード選択中の業者
+  const [view, setView] = useState("calendar");
+  const [currentYM, setCurrentYM] = useState(today().slice(0,7));
+  const [showRegisterFor, setShowRegisterFor] = useState(null);
+  const [editingRequest, setEditingRequest] = useState(null);
+  const [highlightDates, setHighlightDates] = useState([]);
+  const [splitInputs, setSplitInputs] = useState({});
+  const [toast, setToast] = useState(""); const [toastType, setToastType] = useState("ok");
+  const [syncing, setSyncing] = useState(false); const [syncOk, setSyncOk] = useState(false);
+  const [binId, setBinId] = useState(()=>{
+    const saved = localStorage.getItem(BIN_STORAGE_KEY);
+    if(!saved) {
+      localStorage.setItem(BIN_STORAGE_KEY, DEFAULT_BIN_ID);
+      return DEFAULT_BIN_ID;
+    }
+    return saved;
+  });
+  const [vendorEditMode, setVendorEditMode] = useState(false);
+  const [vendorPriceCategories, setVendorPriceCategories] = useState(loadVendorPriceCategories);
+  const [selectedCatVendor, setSelectedCatVendor] = useState(null);
+  const [newCatName, setNewCatName] = useState("");
+  const [editingCatIdx, setEditingCatIdx] = useState(null);
+  const [editingCatName, setEditingCatName] = useState("");
+  const [vendorPendingId, setVendorPendingId] = useState(null);
+  const [vendorPasses, setVendorPasses] = useState(loadVendorPasses);
+  const [vendorPassInput, setVendorPassInput] = useState("");
+  const [vendorPassShake, setVendorPassShake] = useState(false);
+  const [vendorPassDigits, setVendorPassDigits] = useState(["","","",""]);
+  const [newVendorName, setNewVendorName] = useState("");
+  // 業者スケジュール追加
+  const [showVendorSchedForm, setShowVendorSchedForm] = useState(null);
+  const [vendorSchedForm, setVendorSchedForm] = useState({title:"",member:"",note:"",date:today()});
+  // 業務モード
+  const [gyomuView, setGyomuView] = useState("list"); // list | settings | order
+  const [gyomuRange, setGyomuRange] = useState("week");
+  const [gyomuWeekOffset, setGyomuWeekOffset] = useState(0);
+  const [gyomuCustomStart, setGyomuCustomStart] = useState(addDays(today(),-7));
+  const [gyomuCustomEnd, setGyomuCustomEnd] = useState(today());
+  const [editingPrice, setEditingPrice] = useState({});
+  const syncTimer = useRef(null);
+
+  useEffect(()=>{ saveLocal(data); },[data]);
+  useEffect(()=>{ saveVendors(vendors); },[vendors]);
+  useEffect(()=>{ if(toast){const t=setTimeout(()=>setToast(""),2500);return()=>clearTimeout(t);} },[toast]);
+  useEffect(()=>{ if(binId) pullFromCloud(binId); },[]);
+
+  const showToast=(m,type="ok")=>{ setToast(m); setToastType(type); };
+
+  const pullFromCloud = async (id) => {
+    if(!id) return; setSyncing(true); setSyncOk(false);
+    try {
+      const r=await fetchBin(id);
+      if(r&&r.requests){
+        // vendorMembersが空なら初期値で補完
+        if(!r.vendorMembers||Object.keys(r.vendorMembers).length===0){
+          r.vendorMembers=DEFAULT_VENDOR_MEMBERS;
+        }
+        setData(r); saveLocal(r); setSyncOk(true);
+      }
+    }
+    catch { showToast("取得失敗","err"); } finally { setSyncing(false); }
+  };
+  const pushToCloud = async (nd,id) => {
+    const tid=id||binId; if(!tid) return; setSyncing(true);
+    try { await updateBin(tid,nd); setSyncOk(true); }
+    catch { showToast("クラウドに登録中…"); } finally { setSyncing(false); }
+  };
+  const setupCloud = async () => {
+    setSyncing(true);
+    try { const id=await createBin(data); setBinId(id); localStorage.setItem(BIN_STORAGE_KEY,id); setSyncOk(true); showToast("クラウド連携完了"); }
+    catch { showToast("設定失敗","err"); } finally { setSyncing(false); }
+  };
+  const updateData = async (nd) => {
+    setData(nd); saveLocal(nd);
+    if(binId){ clearTimeout(syncTimer.current); syncTimer.current=setTimeout(()=>pushToCloud(nd,binId),800); }
+  };
+
+  // ── データ操作 ──
+  const handleUpdateRequest = async (formData) => {
+    // 担当者モードかつ既に割当済みの場合は変更リクエストを送る
+    const isAssigned = !!data.assignments[editingRequest.id];
+    const countChanged = Number(formData.count) !== Number(editingRequest.count);
+    if(role==="担当者" && isAssigned && countChanged) {
+      const cr = {
+        id: Date.now().toString(),
+        reqId: editingRequest.id,
+        originalCount: editingRequest.count,
+        newCount: Number(formData.count),
+        newData: { ...formData, count: Number(formData.count) },
+        status: "pending",
+        createdAt: new Date().toISOString(),
+        name: editingRequest.name,
+        bukken: editingRequest.bukken,
+        date: editingRequest.date,
+      };
+      const crs = [...(data.changeRequests||[]), cr];
+      await updateData({ ...data, changeRequests: crs });
+      setEditingRequest(null);
+      showToast("変更リクエストを送りました。管理者の承認をお待ちください。");
+    } else {
+      // 未割当または管理者の場合はそのまま更新
+      const updated = data.requests.map(r =>
+        r.id === editingRequest.id ? { ...r, ...formData, count: Number(formData.count) } : r
+      );
+      await updateData({ ...data, requests: updated });
+      setEditingRequest(null);
+      showToast("更新しました");
+    }
+  };
+
+  const handleRegister = async (formData) => {
+    // 30日以上前の案件の画像を自動削除
+    const thirtyDaysAgo = new Date(); thirtyDaysAgo.setDate(thirtyDaysAgo.getDate()-30);
+    const cleanedRequests = data.requests.map(r => {
+      if(r.annaizu && new Date(r.date) < thirtyDaysAgo) {
+        return {...r, annaizu:""};
+      }
+      return r;
+    });
+    const req={ id:Date.now().toString(), ...formData, createdAt:new Date().toISOString(), disclosed:false };
+    await updateData({...data, requests:[...cleanedRequests, req]});
+    const newNames=[formData.name,...names.filter(n=>n!==formData.name)].slice(0,20);
+    setNames(newNames); saveNames(newNames);
+    setShowRegisterFor(null); setView("calendar"); showToast("登録しました");
+  };
+  const deleteRequest = async (id) => {
+    if(!window.confirm("この予定を削除してもよろしいですか？")) return;
+    await updateData({
+      ...data,
+      requests: data.requests.filter(r=>r.id!==id),
+      assignments: Object.fromEntries(Object.entries(data.assignments).filter(([k])=>k!==id)),
+      changeRequests: (data.changeRequests||[]).filter(cr=>cr.reqId!==id)
+    });
+    showToast("削除しました");
+  };
+  const confirmSplit = async (reqId, total) => {
+    const inputs=splitInputs[reqId]||{}; const vals={}; let sum=0;
+    vendors.forEach(v=>{ const n=Number(inputs[v]||0); if(n>0){vals[v]=n;sum+=n;} });
+    if(!sum){ showToast("人数を入力してください","err"); return; }
+    if(sum>total){ showToast(`合計${sum}人が予定${total}人超え`,"err"); return; }
+    await updateData({...data, assignments:{...data.assignments,[reqId]:vals}});
+    setSplitInputs(prev=>({...prev,[reqId]:undefined})); showToast("割当保存");
+  };
+  const clearAssignment = async (reqId) => {
+    const a={...data.assignments}; delete a[reqId]; await updateData({...data,assignments:a});
+  };
+  const toggleDisclose = async (id) => {
+    await updateData({...data, requests:data.requests.map(r=>r.id===id?{...r,disclosed:!r.disclosed}:r)});
+  };
+
+  // 単価カテゴリ管理（業者ごと）
+  const addPriceCategory = (vid) => {
+    if(!newCatName.trim()) return;
+    const cats=getVendorCategories(vendorPriceCategories,vid);
+    if(cats.includes(newCatName.trim())){ showToast("すでに存在します","err"); return; }
+    const updated={...vendorPriceCategories,[vid]:[...cats,newCatName.trim()]};
+    setVendorPriceCategories(updated); saveVendorPriceCategories(updated);
+    setNewCatName(""); showToast("追加しました");
+  };
+  const deletePriceCategory = (vid, idx) => {
+    const cats=getVendorCategories(vendorPriceCategories,vid);
+    const updated={...vendorPriceCategories,[vid]:cats.filter((_,i)=>i!==idx)};
+    setVendorPriceCategories(updated); saveVendorPriceCategories(updated); showToast("削除しました");
+  };
+  const renamePriceCategory = (vid, idx, name) => {
+    if(!name.trim()) return;
+    const cats=[...getVendorCategories(vendorPriceCategories,vid)]; cats[idx]=name.trim();
+    const updated={...vendorPriceCategories,[vid]:cats};
+    setVendorPriceCategories(updated); saveVendorPriceCategories(updated);
+    setEditingCatIdx(null); setEditingCatName(""); showToast("変更しました");
+  };
+
+  // 金額計算ヘルパー（開示済み案件のみ）
+  const calcAmount = (r, vid) => {
+    if(!r.disclosed) return null;
+    const a = data.assignments[r.id];
+    if(!a||!a[vid]) return null;
+    const cat = inferPriceCategory(r.koutei, vid);
+    const priceMap = (data.unitPrices||{})[vid]||{};
+    const price = priceMap[cat]||0;
+    return { count: a[vid], price, total: a[vid]*price, cat };
+  };
+
+  // 業者パスワード変更
+  const changeVendorPass = (vid, newPass) => {
+    const updated = {...vendorPasses, [vid]: newPass};
+    setVendorPasses(updated);
+    saveVendorPasses(updated);
+    showToast("パスワードを変更しました");
+  };
+
+  // 業者管理
+  const addVendor=()=>{ if(!newVendorName.trim()||vendors.includes(newVendorName.trim()))return; setVendors([...vendors,newVendorName.trim()]); setNewVendorName(""); showToast("追加しました"); };
+  const deleteVendor=(v)=>{ setVendors(vendors.filter(vv=>vv!==v)); showToast("削除しました"); };
+  const moveVendor=(idx,dir)=>{ const arr=[...vendors],to=idx+dir; if(to<0||to>=arr.length)return; [arr[idx],arr[to]]=[arr[to],arr[idx]]; setVendors(arr); };
+
+  // 業者メンバー管理
+  const addVendorMember=(vid,name)=>{
+    if(!name.trim()) return;
+    const members=data.vendorMembers||{};
+    const list=members[vid]||[];
+    if(list.includes(name.trim())) return;
+    updateData({...data, vendorMembers:{...members,[vid]:[...list,name.trim()]}});
+  };
+  const deleteVendorMember=(vid,name)=>{
+    const members=data.vendorMembers||{};
+    const list=(members[vid]||[]).filter(n=>n!==name);
+    updateData({...data, vendorMembers:{...members,[vid]:list}});
+  };
+
+  // 業者スケジュール追加
+  const addVendorSchedule = async (vid, sched) => {
+    const schedules=data.vendorSchedules||{};
+    const list=schedules[vid]||[];
+    const newSched={id:Date.now().toString(), ...sched, createdAt:new Date().toISOString()};
+    await updateData({...data, vendorSchedules:{...schedules,[vid]:[...list,newSched]}});
+    showToast("スケジュールを追加しました");
+  };
+  const deleteVendorSchedule = async (vid, sid) => {
+    const schedules=data.vendorSchedules||{};
+    const list=(schedules[vid]||[]).filter(s=>s.id!==sid);
+    await updateData({...data, vendorSchedules:{...schedules,[vid]:list}});
+    showToast("削除しました");
+  };
+
+  // 単価設定
+  const saveUnitPrice=(vid,price)=>{
+    const prices=data.unitPrices||{};
+    updateData({...data, unitPrices:{...prices,[vid]:Number(price)}});
+    showToast("単価を保存しました");
+  };
+
+  // カレンダーデータ
+  const requestsByDate={};
+  data.requests.forEach(r=>{ if(!requestsByDate[r.date])requestsByDate[r.date]=[]; requestsByDate[r.date].push(r); });
+
+  // 業務モード：実績計算
+  const getGyomuRange=()=>{
+    if(gyomuRange==="week") return getWeekRange(gyomuWeekOffset);
+    return { start:gyomuCustomStart, end:gyomuCustomEnd };
+  };
+  // 工程から単価カテゴリを推定（業者ごとのカテゴリに対応）
+  const inferPriceCategory = (koutei, vid) => {
+    const cats = getVendorCategories(vendorPriceCategories, vid||"");
+    if(!koutei) return cats[0]||"";
+    if(koutei.includes("コラム")&&cats.includes("コラム")) return "コラム";
+    if(koutei.includes("建て方")) {
+      if((koutei.includes("手起こし")||koutei.includes("ハーフ"))&&cats.includes("ハーフ")) return "ハーフ";
+      if(cats.includes("建て方")) return "建て方";
+    }
+    if(cats.includes("１日")) return "１日";
+    return cats[0]||"";
+  };
+
+  const getGyomuData=()=>{
+    const {start,end}=getGyomuRange();
+    const rows=[];
+    data.requests.forEach(r=>{
+      if(r.date<start||r.date>end) return;
+      if(!r.disclosed) return;
+      const a=data.assignments[r.id];
+      if(!a) return;
+      Object.entries(a).forEach(([vid,cnt])=>{
+        const cat=inferPriceCategory(r.koutei,vid);
+        const priceMap=(data.unitPrices||{})[vid]||{};
+        const price=priceMap[cat]||0;
+        rows.push({ date:r.date, bukken:r.bukken||"物件名未入力", vendor:vid, count:cnt, price, total:cnt*price, koutei:r.koutei, cat, reqId:r.id });
+      });
+    });
+    rows.sort((a,b)=>a.date.localeCompare(b.date));
+    return rows;
+  };
+
+  // SplitUI
+  const SplitUI=({r})=>{
+    const asgn=data.assignments[r.id]||{};
+    const inputs=splitInputs[r.id]||{};
+    const editing=splitInputs[r.id]!==undefined;
+    const start=()=>setSplitInputs(p=>({...p,[r.id]:Object.fromEntries(vendors.map(v=>[v,asgn[v]?String(asgn[v]):""]))}) );
+    return editing?(
+      <div style={S.splitPanel}>
+        <div style={S.splitHint}>予定 <b>{r.count}人</b> ／ 業者ごとの人数</div>
+        {vendors.map(v=>(
+          <div key={v} style={S.splitRow}>
+            <span style={{...S.pill,background:vendorBg(v,vendors),color:vendorColor(v,vendors),minWidth:100,textAlign:"center",fontWeight:600}}>{v}</span>
+            <input type="number" min={0} max={r.count} value={inputs[v]||""} placeholder="0"
+              onChange={e=>setSplitInputs(p=>({...p,[r.id]:{...p[r.id],[v]:e.target.value}}))} style={S.numInput}/>
+            <span style={S.splitUnit}>人</span>
+          </div>
+        ))}
+        <div style={{display:"flex",gap:8,marginTop:10}}>
+          <button style={S.btnPrimary} onClick={()=>confirmSplit(r.id,r.count)}>確定</button>
+          <button style={S.btnGhost} onClick={()=>setSplitInputs(p=>({...p,[r.id]:undefined}))}>キャンセル</button>
+        </div>
+      </div>
+    ):(
+      <button style={S.btnAssign} onClick={start}>
+        {Object.keys(asgn).length>0?"✏️ 割当を変更":"＋ 業者を割り当てる"}
+      </button>
+    );
+  };
+
+  // ── PIN画面 ──
+  if(showPin) return (
+    <PinPad title={showPin==="管理者"?"管理者ログイン":"業務モード"}
+      onSuccess={()=>{ setRole(showPin); setShowPin(null); setView("calendar"); }}
+      onCancel={()=>setShowPin(null)}/>
+  );
+
+  // ── ロール選択 ──
+  if(!role) return (
+    <div style={{fontFamily:"'Noto Sans JP','Hiragino Sans',sans-serif",background:"#f7f7f8",minHeight:"100vh",maxWidth:430,margin:"0 auto",overflowX:"hidden",width:"100%"}}>
+      <div style={{padding:"48px 20px 32px",display:"flex",flexDirection:"column",alignItems:"center",width:"100%",boxSizing:"border-box"}}>
+        <div style={{marginBottom:32,textAlign:"center"}}>
+          <div style={{fontSize:9,fontWeight:300,letterSpacing:8,color:"#aaaaaa",marginBottom:12}}>SUMITOMO FORESTRY HE</div>
+          <div style={{fontSize:24,fontWeight:300,color:"#1a1a1a",letterSpacing:"0.15em",marginBottom:8}}>建て方管理ツール</div>
+          <div style={{fontSize:9,fontWeight:300,letterSpacing:4,color:"#bbbbbb"}}>KANAGAWA</div>
+        </div>
+
+        <div style={{width:"100%",maxWidth:360,marginBottom:24}}>
+          <div style={{fontSize:11,color:"#888",marginBottom:10,textAlign:"center"}}>
+            {binId?"● クラウド連携済み":"● クラウド未設定"}
+          </div>
+          {!binId&&(
+            <div
+              style={{display:"block",width:"100%",padding:"16px",background:"#1a1a1a",color:"#fff",borderRadius:8,fontSize:15,textAlign:"center",WebkitUserSelect:"none"}}
+              onClick={()=>setupCloud()}>
+              初期設定する
+            </div>
+          )}
+          {binId&&(
+            <div
+              style={{display:"block",width:"100%",padding:"16px",background:"#1a1a1a",color:"#fff",borderRadius:8,fontSize:15,textAlign:"center",WebkitUserSelect:"none"}}
+              onClick={()=>pullFromCloud(binId)}>
+              {syncing?"取得中…":"↻ 最新データを取得"}
+            </div>
+          )}
+        </div>
+
+        <div style={{width:"100%",maxWidth:360,display:"flex",flexDirection:"column",gap:10}}>
+          {[
+            {key:"担当者",icon:"TN",desc:"予定を入力する",pin:false},
+            {key:"管理者",icon:"MG",desc:"業者調整・開示（要パスワード）",pin:true,style:S.roleCardManager},
+            {key:"業者",icon:"VD",desc:"スケジュール確認・入力",pin:false},
+            {key:"業務",icon:"OP",desc:"発注処理・実績管理（要パスワード）",pin:true,style:S.roleCardGyomu},
+          ].map(r=>(
+            <button key={r.key} style={{...S.roleCard,...(r.style||{})}}
+              onClick={()=>{ if(r.pin){setShowPin(r.key);}else if(r.key==="業者"){setRole("業者");}else{setRole(r.key);setView("calendar");} }}>
+              <div style={{width:38,height:38,borderRadius:8,background:"#1a1a1a",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                <span style={{fontFamily:"'Inter',sans-serif",fontSize:10,fontWeight:300,color:"#fff",letterSpacing:3}}>{r.icon}</span>
+              </div>
+              <div><div style={S.roleLabel}>{r.key}</div><div style={S.roleDesc}>{r.desc}</div></div>
+              <span style={S.roleChev}>›</span>
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+
+  // ── 業者選択 ──
+  if(role==="業者"&&!vendorId&&!vendorPendingId) return (
+    <div style={S.root}>
+      <div style={S.splash}>
+        <div style={S.splashIcon}>🏢</div>
+        <div style={S.splashTitle}>業者を選択</div>
+        <div style={S.splashSub}>どちらの業者ですか？</div>
+        <div style={S.roleSection}>
+          {vendors.map(v=>(
+            <button key={v} style={{...S.roleCard,borderLeft:`4px solid ${vendorColor(v,vendors)}`}}
+              onClick={()=>{ setVendorPendingId(v); }}>
+              <div style={{width:36,height:36,borderRadius:8,background:"#1c1c1e",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                <span style={{fontFamily:"'Montserrat',sans-serif",fontSize:10,fontWeight:800,color:"#fff",letterSpacing:1}}>VD</span>
+              </div>
+              <div><div style={{...S.roleLabel,color:vendorColor(v,vendors)}}>{v}</div></div>
+              <span style={S.roleChev}>›</span>
+            </button>
+          ))}
+        </div>
+        <button style={{...S.btnGhost,marginTop:16,width:"100%"}} onClick={()=>setRole(null)}>戻る</button>
+      </div>
+    </div>
+  );
+
+  // ── 業者PIN認証 ──
+  if(role==="業者"&&!vendorId&&vendorPendingId) {
+    const correctPass = getVendorPass(vendorPasses, vendorPendingId);
+    return (
+      <PinPadVendor
+        vendorName={vendorPendingId}
+        correctPass={correctPass}
+        onSuccess={()=>{ setVendorId(vendorPendingId); setVendorPendingId(null); setView("calendar"); }}
+        onCancel={()=>setVendorPendingId(null)}/>
+    );
+  }
+
+  // ── 業者スケジュール追加フォーム ──
+  if(showVendorSchedForm) return (
+    <div style={S.root}>
+      <div style={S.header}>
+        <div><div style={S.headerTitle}>スケジュール追加</div><div style={S.headerSub}>{vendorId}</div></div>
+        <button style={S.headerBtn} onClick={()=>setShowVendorSchedForm(null)}>キャンセル</button>
+      </div>
+      <main style={S.main}>
+        <div style={S.formCard}>
+          <div style={S.formRow}>
+            <label style={S.formLabel}>タイトル <span style={{color:"#ff3b30"}}>*</span></label>
+            <input style={S.formInput} value={vendorSchedForm.title} onChange={e=>setVendorSchedForm(f=>({...f,title:e.target.value}))} placeholder="例：田中 休暇、〇〇現場"/>
+          </div>
+          <div style={S.formRow}>
+            <label style={S.formLabel}>日付 <span style={{color:"#ff3b30"}}>*</span></label>
+            <input style={S.formInput} type="date" value={vendorSchedForm.date} onChange={e=>setVendorSchedForm(f=>({...f,date:e.target.value}))}/>
+          </div>
+          <div style={S.formRow}>
+            <label style={S.formLabel}>担当メンバー</label>
+            <select style={S.formInput} value={vendorSchedForm.member} onChange={e=>setVendorSchedForm(f=>({...f,member:e.target.value}))}>
+              <option value="">─ 選択（任意）─</option>
+              {(data.vendorMembers[vendorId]||[]).map(m=><option key={m} value={m}>{m}</option>)}
+            </select>
+          </div>
+          <div style={S.formRow}>
+            <label style={S.formLabel}>備考</label>
+            <input style={S.formInput} value={vendorSchedForm.note} onChange={e=>setVendorSchedForm(f=>({...f,note:e.target.value}))} placeholder="メモ"/>
+          </div>
+          <button style={{...S.btnPrimary,width:"100%",marginTop:16,padding:"14px"}} onClick={async()=>{
+            if(!vendorSchedForm.title||!vendorSchedForm.date){showToast("タイトルと日付は必須です","err");return;}
+            await addVendorSchedule(vendorId,vendorSchedForm);
+            setVendorSchedForm({title:"",member:"",note:"",date:today()});
+            setShowVendorSchedForm(null);
+          }}>追加する</button>
+        </div>
+      </main>
+    </div>
+  );
+
+  // ── 予定編集オーバーレイ ──
+  if(editingRequest!==null) return (
+    <div style={S.root}>
+      <div style={S.header}>
+        <div><div style={S.headerTitle}>予定を編集</div><div style={S.headerSub}>担当者モード</div></div>
+      </div>
+      <main style={S.main}>
+        <EditForm
+          request={editingRequest}
+          vendors={vendors}
+          names={names}
+          onSave={handleUpdateRequest}
+          onCancel={()=>setEditingRequest(null)}
+          syncing={syncing}/>
+      </main>
+    </div>
+  );
+
+  // ── 予定登録オーバーレイ ──
+  if(showRegisterFor!==null) return (
+    <div style={S.root}>
+      <div style={S.header}>
+        <div><div style={S.headerTitle}>荷揚げ管理</div><div style={S.headerSub}>担当者モード</div></div>
+      </div>
+      <main style={S.main}>
+        <RegisterForm initialDate={showRegisterFor||today()} vendors={vendors} names={names}
+          onSave={handleRegister} onCancel={()=>setShowRegisterFor(null)} syncing={syncing}/>
+      </main>
+    </div>
+  );
+
+  // ── ナビ定義 ──
+  const navItems = {
+    担当者: [{key:"calendar",label:"カレンダー",icon:"📅"},{key:"input",label:"予定登録",icon:"＋"}],
+    管理者: [{key:"calendar",label:"カレンダー",icon:"📅"},{key:"adjust",label:"業者調整",icon:"⚙️"},{key:"vendors",label:"業者一覧",icon:"🏢"}],
+    業者:   [{key:"calendar",label:"カレンダー",icon:"📅"},{key:"members",label:"メンバー",icon:"👥"},{key:"schedules",label:"スケジュール",icon:"📌"}],
+    業務:   [{key:"list",label:"実績一覧",icon:"📋"},{key:"settings",label:"単価設定",icon:"💴"}],
+  }[role]||[];
+
+  const gyomuData = role==="業務" ? getGyomuData() : [];
+  const gyomuTotal = gyomuData.reduce((s,r)=>s+r.total,0);
+
+  return (
+    <div style={S.root}>
+      <div style={S.header}>
+        <div>
+          <div style={S.headerTitle}>建 て 方 管 理</div>
+          <div style={S.headerSub}>{role==="業者"?`${vendorId}`:`${role}モード`}</div>
+        </div>
+        <div style={{display:"flex",alignItems:"center",gap:8}}>
+          {syncing?<span style={{fontSize:14,color:"#007aff"}}>↻</span>:syncOk?<span style={{fontSize:12,color:"#34c759"}}>●</span>:null}
+          {role==="管理者"&&(()=>{
+            const unassignedCount=data.requests.filter(r=>!data.assignments[r.id]).length;
+            const pendingCount=(data.changeRequests||[]).filter(cr=>cr.status==="pending").length;
+            return (
+              <div style={{display:"flex",gap:6}}>
+                {unassignedCount>0&&(
+                  <span style={{...S.headerBadgeRed,cursor:"pointer"}} onClick={()=>{
+                    const dates=[...new Set(data.requests.filter(r=>!data.assignments[r.id]).map(r=>r.date))];
+                    setHighlightDates(dates);
+                    setCurrentYM(dates[0]?dates[0].slice(0,7):currentYM);
+                    setView("calendar");
+                    showToast(`未割当：${dates.join("、")}`);
+                  }}>{unassignedCount}件未割当</span>
+                )}
+                {pendingCount>0&&(
+                  <span style={{...S.headerBadgeOrange,cursor:"pointer"}} onClick={()=>{
+                    const dates=[...new Set((data.changeRequests||[]).filter(cr=>cr.status==="pending").map(cr=>cr.date))];
+                    setHighlightDates(dates);
+                    setCurrentYM(dates[0]?dates[0].slice(0,7):currentYM);
+                    setView("calendar");
+                    showToast(`変更申請：${dates.join("、")}`);
+                  }}>{pendingCount}件変更申請</span>
+                )}
+              </div>
+            );
+          })()}
+          <button style={S.headerBtn} onClick={()=>{ setRole(null); setVendorId(null); setView("calendar"); }}>切替</button>
+        </div>
+      </div>
+
+      <div style={S.tabBar}>
+        {navItems.map(n=>(
+          <button key={n.key} style={{...S.tab,...(view===n.key?S.tabActive:{})}}
+            onClick={()=>setView(n.key)}>
+            <span style={{fontSize:14,fontWeight:700,letterSpacing:"0.05em"}}>{n.label}</span>
+
+          </button>
+        ))}
+      </div>
+
+      <main style={S.main}>
+
+        {/* ── カレンダー（担当者・管理者・業者） ── */}
+        {view==="calendar"&&role!=="業務"&&(
+          <div>
+            <button style={S.refreshBtn} onClick={()=>pullFromCloud(binId)} disabled={syncing}>
+              {syncing?"取得中…":"↻ 最新データを取得"}
+            </button>
+            <CalendarView
+              currentYM={currentYM} setCurrentYM={setCurrentYM}
+              requestsByDate={requestsByDate} assignments={data.assignments}
+              vendors={vendors} role={role}
+              vendorId={role==="業者"?vendorId:null}
+              vendorSchedules={data.vendorSchedules||{}}
+              onDayTap={(ds,isEmpty)=>{ if(role==="担当者"&&isEmpty) setShowRegisterFor(ds); }}
+              onAddSchedule={(ds)=>{ setVendorSchedForm(f=>({...f,date:ds})); setShowVendorSchedForm(ds); }}
+              onDeleteSchedule={(vid,sid)=>deleteVendorSchedule(vid,sid)}
+              onDeleteRequest={(id)=>deleteRequest(id)}
+              vendorMembers={role==="業者"?(data.vendorMembers[vendorId]||[]):[]}
+              onEditRequest={(r)=>setEditingRequest(r)}
+              highlightDates={highlightDates}
+              memberAssignments={data.memberAssignments||{}}
+              renderChangeStatus={role==="担当者"?((r)=>{
+                const pending=(data.changeRequests||[]).find(cr=>cr.reqId===r.id&&cr.status==="pending");
+                const approved=(data.changeRequests||[]).find(cr=>cr.reqId===r.id&&cr.status==="approved");
+                const rejected=(data.changeRequests||[]).find(cr=>cr.reqId===r.id&&cr.status==="rejected");
+                if(pending) return <div style={{fontSize:11,color:"#ff9500",marginTop:4}}>⏳ 変更申請中（{pending.originalCount}人→{pending.newCount}人）</div>;
+                if(approved) return <div style={{fontSize:11,color:"#34c759",marginTop:4}}>✅ 変更承認済み</div>;
+                if(rejected) return <div style={{fontSize:11,color:"#ff3b30",marginTop:4}}>❌ 変更却下されました</div>;
+                return null;
+              }):null}
+              onSaveMemberAssign={(reqId,members)=>{
+                const ma=data.memberAssignments||{};
+                updateData({...data, memberAssignments:{...ma,[reqId]:{...(ma[reqId]||{}),[vendorId]:members}}});
+                showToast("メンバーを割り当てました");
+              }}
+              renderSplitUI={role==="管理者"?((r)=><SplitUI r={r}/>):null}
+              renderDiscloseBtn={role==="管理者"?((r)=>{
+                const asgn=data.assignments[r.id];
+                if(!asgn) return (
+                  <button style={S.discloseBtnOff} disabled>未割当</button>
+                );
+                return (
+                  <div>
+                    {Object.entries(asgn).map(([vid,cnt])=>{
+                      const priceMap=(data.unitPrices||{})[vid]||{};
+                      const cat=inferPriceCategory(r.koutei,vid);
+                      const price=priceMap[cat]||0;
+                      const total=cnt*price;
+                      const vMembers=data.vendorMembers[vid]||[];
+                      const initSel=(data.memberAssignments||{})[r.id]?(data.memberAssignments[r.id][vid]||[]):[];
+                      return (
+                        <div key={vid} style={{marginTop:6,width:"100%",boxSizing:"border-box"}}>
+                          {price>0&&<div style={{fontSize:11,color:"#2d9e6b",marginBottom:4,fontWeight:500}}>
+                            {vid}：{cnt}人×¥{price.toLocaleString()}＝¥{total.toLocaleString()}
+                          </div>}
+                          <MemberAssignCard
+                            r={r} a={asgn} vendorId={vid} vendors={vendors}
+                            vendorMembers={vMembers}
+                            initialSelected={initSel}
+                            onDelete={()=>deleteRequest(r.id)}
+                            onSave={(reqId,members)=>{
+                              const ma={...(data.memberAssignments||{})};
+                              ma[reqId]={...(ma[reqId]||{}),[vid]:members};
+                              updateData({...data, memberAssignments:ma});
+                              showToast("メンバーを割り当てました");
+                            }}/>
+                        </div>
+                      );
+                    })}
+                    <button style={r.disclosed?S.discloseBtnOn:S.discloseBtnOff} onClick={()=>toggleDisclose(r.id)}>
+                      {r.disclosed?"開示済 ✓":"開示する"}
+                    </button>
+                  </div>
+                );
+              }):null}
+            />
+          </div>
+        )}
+
+        {/* ── 予定登録タブ ── */}
+        {view==="input"&&role==="担当者"&&(
+          <RegisterForm initialDate={today()} vendors={vendors} names={names} onSave={handleRegister} syncing={syncing}/>
+        )}
+
+        {/* ── 業者調整 ── */}
+        {view==="adjust"&&role==="管理者"&&(
+          <div>
+            <button style={S.refreshBtn} onClick={()=>pullFromCloud(binId)} disabled={syncing}>
+              {syncing?"取得中…":"↻ 最新データを取得"}
+            </button>
+
+            {/* 変更リクエスト */}
+            {(data.changeRequests||[]).filter(cr=>cr.status==="pending").length>0&&(
+              <div style={{marginBottom:12}}>
+                <div style={{...S.sectionLabel,color:"#ff9500"}}>⚠️ 変更リクエスト {(data.changeRequests||[]).filter(cr=>cr.status==="pending").length}件</div>
+                {(data.changeRequests||[]).filter(cr=>cr.status==="pending").map(cr=>(
+                  <div key={cr.id} style={{...S.reqCard,borderLeftColor:"#ff9500",marginBottom:8}}>
+                    <div style={S.reqName}>{cr.name}　<span style={S.reqDate}>{cr.date}（{dayOfWeek(cr.date)}）</span></div>
+                    {cr.bukken&&<div style={S.bukken}>🏠 {cr.bukken}</div>}
+                    <div style={{fontSize:13,color:"#ff9500",marginTop:4,fontWeight:600}}>
+                      人数変更申請：{cr.originalCount}人 → {cr.newCount}人
+                    </div>
+                    <div style={{display:"flex",gap:8,marginTop:8}}>
+                      <button style={{...S.btnPrimary,padding:"6px 16px",fontSize:13}} onClick={async()=>{
+                        // 承認：リクエストの内容でrequestsを更新し、割当をリセット
+                        const updatedReqs = data.requests.map(r =>
+                          r.id===cr.reqId ? {...r, ...cr.newData} : r
+                        );
+                        const updatedAssigns = {...data.assignments};
+                        delete updatedAssigns[cr.reqId];
+                        const updatedCRs = (data.changeRequests||[]).map(c =>
+                          c.id===cr.id ? {...c, status:"approved"} : c
+                        );
+                        await updateData({...data, requests:updatedReqs, assignments:updatedAssigns, changeRequests:updatedCRs});
+                        showToast("承認しました。再割当してください。");
+                      }}>✓ 承認</button>
+                      <button style={{...S.btnGhost,padding:"6px 14px",fontSize:13,color:"#ff3b30"}} onClick={async()=>{
+                        const updatedCRs = (data.changeRequests||[]).map(c =>
+                          c.id===cr.id ? {...c, status:"rejected"} : c
+                        );
+                        await updateData({...data, changeRequests:updatedCRs});
+                        showToast("却下しました。");
+                      }}>✕ 却下</button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* 未割当 */}
+            <div style={S.sectionLabel}>未割当 {data.requests.filter(r=>!data.assignments[r.id]).length}件</div>
+            {data.requests.filter(r=>!data.assignments[r.id]).map(r=>(
+              <div key={r.id} style={{...S.reqCard,borderLeftColor:"#ff9500"}}>
+                <div style={{display:"flex",justifyContent:"space-between"}}>
+                  <div style={{flex:1}}>
+                    <div style={S.reqName}>{r.name}　<span style={S.reqDate}>{r.date}（{dayOfWeek(r.date)}）</span></div>
+                    {r.bukken&&<div style={S.bukken}>🏠 {r.bukken}</div>}
+                    {r.koutei&&<div style={S.kouteiChip}>{r.koutei}</div>}
+                    <div style={S.reqMeta}>👷 {r.count}人{r.tsubo?`　${r.tsubo}`:""}{r.floors?`　${r.floors}階`:""}</div>
+                {r.daiku&&<div style={{fontSize:11,color:"#8e8e93",marginTop:2}}>大工：{r.daiku}</div>}
+                {r.rekkaa&&<div style={{fontSize:11,color:"#8e8e93",marginTop:2}}>レッカー：{r.rekkaa}</div>}
+                    {r.note&&<div style={S.reqNote}>{r.note}</div>}
+                  </div>
+                  <div style={{display:"flex",gap:4}}>
+                    <button style={S.editSmBtn} onClick={()=>setEditingRequest(r)}>✏️</button>
+                    <button style={S.delBtn} onClick={()=>deleteRequest(r.id)}>✕</button>
+                  </div>
+                </div>
+                <SplitUI r={r}/>
+              </div>
+            ))}
+            {/* 割当済 */}
+            <div style={{...S.sectionLabel,marginTop:20}}>割当済 {data.requests.filter(r=>data.assignments[r.id]).length}件</div>
+            {data.requests.filter(r=>data.assignments[r.id]).map(r=>{
+              const a=data.assignments[r.id]||{}; const fv=Object.keys(a)[0];
+              return (
+                <div key={r.id} style={{...S.reqCard,borderLeftColor:fv?vendorColor(fv,vendors):"#c7c7cc"}}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
+                    <div style={{flex:1}}>
+                      <div style={S.reqName}>{r.name}　<span style={S.reqDate}>{r.date}（{dayOfWeek(r.date)}）</span></div>
+                      {r.bukken&&<div style={S.bukken}>🏠 {r.bukken}</div>}
+                      {r.koutei&&<div style={S.kouteiChip}>{r.koutei}</div>}
+                      <div style={S.reqMeta}>👷 {r.count}人{r.tsubo?`　${r.tsubo}`:""}{r.floors?`　${r.floors}階`:""}</div>
+                {r.daiku&&<div style={{fontSize:11,color:"#8e8e93",marginTop:2}}>大工：{r.daiku}</div>}
+                {r.rekkaa&&<div style={{fontSize:11,color:"#8e8e93",marginTop:2}}>レッカー：{r.rekkaa}</div>}
+                      <div style={S.chipRow}>
+                        {Object.entries(a).map(([v,c])=>(
+                          <span key={v} style={{...S.pill,background:vendorBg(v,vendors),color:vendorColor(v,vendors),fontWeight:600}}>{v} {c}人</span>
+                        ))}
+                      </div>
+                      {r.disclosed&&Object.entries(a).map(([vid,cnt])=>{
+                        const priceMap=(data.unitPrices||{})[vid]||{};
+                        const cat=inferPriceCategory(r.koutei,vid);
+                        const price=priceMap[cat]||0;
+                        const total=cnt*price;
+                        return price>0?(
+                          <div key={vid} style={{fontSize:11,color:"#2d9e6b",marginTop:3,fontWeight:600}}>
+                            💴 {vid}：{cnt}人×¥{price.toLocaleString()}＝¥{total.toLocaleString()}
+                          </div>
+                        ):null;
+                      })}
+                      <button style={r.disclosed?S.discloseBtnOn:S.discloseBtnOff} onClick={()=>toggleDisclose(r.id)}>
+                        {r.disclosed?"開示済 ✓":"開示する"}
+                      </button>
+                    </div>
+                    <div style={{display:"flex",flexDirection:"column",gap:6,marginLeft:8}}>
+                      <button style={S.editSmBtn} onClick={()=>setEditingRequest(r)}>✏️</button>
+                      <button style={S.delBtn} onClick={()=>deleteRequest(r.id)}>✕</button>
+                      <button style={S.undoBtn} onClick={()=>clearAssignment(r.id)}>↩</button>
+                    </div>
+                  </div>
+                  <SplitUI r={r}/>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {/* ── 業者一覧（管理者） ── */}
+        {view==="vendors"&&role==="管理者"&&(
+          <div>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+              <div style={S.sectionLabel}>荷揚げ業者一覧</div>
+              <button style={vendorEditMode?S.editModeOnBtn:S.editModeOffBtn} onClick={()=>setVendorEditMode(!vendorEditMode)}>
+                {vendorEditMode?"完了":"✏️ 編集"}
+              </button>
+            </div>
+            {vendorEditMode&&(
+              <div style={S.vendorEditPanel}>
+                <div style={{fontSize:13,color:"#8e8e93",marginBottom:10}}>追加・削除・並び替え</div>
+                {vendors.map((v,idx)=>(
+                  <div key={v} style={S.vendorEditRow}>
+                    <div style={{display:"flex",gap:4}}>
+                      <button style={S.orderBtn} onClick={()=>moveVendor(idx,-1)} disabled={idx===0}>↑</button>
+                      <button style={S.orderBtn} onClick={()=>moveVendor(idx,1)} disabled={idx===vendors.length-1}>↓</button>
+                    </div>
+                    <span style={{...S.pill,background:vendorBg(v,vendors),color:vendorColor(v,vendors),fontWeight:600,flex:1}}>{v}</span>
+                    <button style={S.delBtn} onClick={()=>deleteVendor(v)}>✕</button>
+                  </div>
+                ))}
+                <div style={{display:"flex",gap:8,marginTop:12}}>
+                  <input style={{...S.formInput,flex:1}} value={newVendorName} onChange={e=>setNewVendorName(e.target.value)} placeholder="新しい業者名"/>
+                  <button style={S.btnPrimary} onClick={addVendor}>追加</button>
+                </div>
+              </div>
+            )}
+            {vendors.map(v=>{
+              const items=[]; data.requests.forEach(r=>{ const a=data.assignments[r.id]; if(a&&a[v]>0)items.push({...r,ac:a[v]}); });
+              items.sort((a,b)=>a.date.localeCompare(b.date));
+              const total=items.reduce((s,r)=>s+r.ac,0);
+              return (
+                <div key={v} style={{...S.vendorCard,borderTopColor:vendorColor(v,vendors)}}>
+                  <div style={{...S.vendorName,color:vendorColor(v,vendors)}}>{v}</div>
+                  <div style={S.vendorStat}>{items.length}件　計{total}人</div>
+                  <VendorPassSetting
+                    vendorName={v}
+                    currentPass={getVendorPass(vendorPasses,v)}
+                    onSave={(np)=>changeVendorPass(v,np)}/>
+                  <div style={{marginTop:10,paddingTop:10,borderTop:"0.5px solid #f2f2f7"}}>
+                    <div style={{fontSize:10,color:"#aaaaaa",marginBottom:6,letterSpacing:"0.1em"}}>MEMBERS</div>
+                    <MemberManager
+                      vendorId={v}
+                      members={data.vendorMembers[v]||[]}
+                      onAdd={name=>addVendorMember(v,name)}
+                      onDelete={name=>deleteVendorMember(v,name)}/>
+                  </div>
+                  {items.map(r=>(
+                    <div key={r.id+v} style={S.vendorRow}>
+                      <div style={{fontSize:13}}>{r.date}（{dayOfWeek(r.date)}）　{r.name}　<b>{r.ac}人</b></div>
+                      {r.bukken&&<div style={S.bukken}>🏠 {r.bukken}</div>}
+                      {r.koutei&&<span style={S.kouteiChip}>{r.koutei}</span>}
+                      {r.disclosed&&<span style={S.disclosedChip}>開示済</span>}
+                    </div>
+                  ))}
+                  {items.length===0&&<div style={{fontSize:13,color:"#c7c7cc",marginTop:4}}>割当なし</div>}
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {/* ── 業者モード：メンバー管理 ── */}
+        {view==="members"&&role==="業者"&&(
+          <div>
+            <div style={S.sectionLabel}>{vendorId} のメンバー</div>
+            <MemberManager
+              vendorId={vendorId} members={data.vendorMembers[vendorId]||[]}
+              onAdd={name=>addVendorMember(vendorId,name)}
+              onDelete={name=>deleteVendorMember(vendorId,name)}/>
+          </div>
+        )}
+
+        {/* ── 業者モード：スケジュール一覧 ── */}
+        {view==="schedules"&&role==="業者"&&(
+          <div>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+              <div style={S.sectionLabel}>自社スケジュール</div>
+              <button style={S.addDayBtn} onClick={()=>{ setVendorSchedForm({title:"",member:"",note:"",date:today()}); setShowVendorSchedForm("list"); }}>＋ 追加</button>
+            </div>
+            {(data.vendorSchedules[vendorId]||[]).sort((a,b)=>a.date.localeCompare(b.date)).map(s=>(
+              <div key={s.id} style={{...S.reqCard,borderLeftColor:"#ff9500"}}>
+                <div style={{display:"flex",justifyContent:"space-between"}}>
+                  <div>
+                    <div style={S.reqDate}>{s.date}（{dayOfWeek(s.date)}）</div>
+                    <div style={S.reqName}>{s.title}</div>
+                    {s.member&&<div style={S.reqMeta}>👤 {s.member}</div>}
+                    {s.note&&<div style={S.reqNote}>{s.note}</div>}
+                  </div>
+                  <button style={S.delBtn} onClick={()=>deleteVendorSchedule(vendorId,s.id)}>✕</button>
+                </div>
+              </div>
+            ))}
+            {(data.vendorSchedules[vendorId]||[]).length===0&&<div style={S.empty}>スケジュールなし</div>}
+          </div>
+        )}
+
+        {/* ── 業務モード：実績一覧 ── */}
+        {view==="list"&&role==="業務"&&(
+          <div>
+            <button style={S.refreshBtn} onClick={()=>pullFromCloud(binId)} disabled={syncing}>
+              {syncing?"取得中…":"↻ 最新データを取得"}
+            </button>
+            {/* 期間選択 */}
+            <div style={S.gyomuRangeBar}>
+              <button style={{...S.rangeBtn,...(gyomuRange==="week"?S.rangeBtnActive:{})}} onClick={()=>setGyomuRange("week")}>週単位</button>
+              <button style={{...S.rangeBtn,...(gyomuRange==="custom"?S.rangeBtnActive:{})}} onClick={()=>setGyomuRange("custom")}>期間指定</button>
+            </div>
+            {gyomuRange==="week"&&(
+              <div style={S.weekNav}>
+                <button style={S.calNavBtn} onClick={()=>setGyomuWeekOffset(o=>o-1)}>‹</button>
+                <span style={{fontSize:13,fontWeight:600,color:"#1c1c1e"}}>
+                  {getWeekRange(gyomuWeekOffset).start} 〜 {getWeekRange(gyomuWeekOffset).end}
+                </span>
+                <button style={S.calNavBtn} onClick={()=>setGyomuWeekOffset(o=>o+1)}>›</button>
+              </div>
+            )}
+            {gyomuRange==="custom"&&(
+              <div style={{display:"flex",gap:8,marginBottom:12,alignItems:"center"}}>
+                <input style={{...S.formInput,flex:1,fontSize:13}} type="date" value={gyomuCustomStart} onChange={e=>setGyomuCustomStart(e.target.value)}/>
+                <span style={{fontSize:13,color:"#8e8e93"}}>〜</span>
+                <input style={{...S.formInput,flex:1,fontSize:13}} type="date" value={gyomuCustomEnd} onChange={e=>setGyomuCustomEnd(e.target.value)}/>
+              </div>
+            )}
+
+            {/* 実績テーブル */}
+            <div style={S.gyomuTable}>
+              <div style={S.gyomuTableHeader}>
+                <span style={{flex:2}}>日付・物件</span>
+                <span style={{flex:1,textAlign:"center"}}>業者</span>
+                <span style={{flex:1,textAlign:"center"}}>人数</span>
+                <span style={{flex:1,textAlign:"right"}}>金額</span>
+              </div>
+              {gyomuData.map((row,i)=>(
+                <div key={i} style={{...S.gyomuRow,...(i%2===0?{background:"#fff"}:{background:"#f9f9f9"})}}>
+                  <div style={{flex:2}}>
+                    <div style={{fontSize:11,color:"#8e8e93"}}>{row.date}（{dayOfWeek(row.date)}）{row.koutei?`　${row.koutei}`:""}</div>
+                    <div style={{fontSize:13,fontWeight:600,color:"#1c1c1e"}}>{row.bukken}</div>
+                  </div>
+                  <span style={{flex:1,textAlign:"center",fontSize:12,color:vendorColor(row.vendor,vendors),fontWeight:600}}>{row.vendor}</span>
+                  <span style={{flex:1,textAlign:"center",fontSize:13}}>{row.count}人</span>
+                  <span style={{flex:1,textAlign:"right",fontSize:13,fontWeight:600}}>
+                    {row.price>0?`¥${(row.total).toLocaleString()}`:"未設定"}
+                  </span>
+                </div>
+              ))}
+              {gyomuData.length===0&&<div style={{padding:"20px",textAlign:"center",color:"#aeaeb2",fontSize:14}}>該当期間に開示済みの実績がありません</div>}
+            </div>
+
+            {/* 合計 */}
+            {gyomuData.length>0&&(
+              <div style={S.gyomuTotal}>
+                <span>合計</span>
+                <span style={{fontWeight:700,fontSize:18}}>¥{gyomuTotal.toLocaleString()}</span>
+              </div>
+            )}
+
+            {/* 業者別集計 */}
+            {gyomuData.length>0&&(
+              <div style={{marginTop:12}}>
+                <div style={S.sectionLabel}>業者別集計</div>
+                {vendors.map(v=>{
+                  const rows=gyomuData.filter(r=>r.vendor===v);
+                  if(rows.length===0) return null;
+                  const total=rows.reduce((s,r)=>s+r.total,0);
+                  const count=rows.reduce((s,r)=>s+r.count,0);
+                  return (
+                    <div key={v} style={{...S.vendorCard,borderTopColor:vendorColor(v,vendors),padding:"10px 14px"}}>
+                      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                        <div style={{...S.vendorName,color:vendorColor(v,vendors),fontSize:14}}>{v}</div>
+                        <div style={{textAlign:"right"}}>
+                          <div style={{fontSize:12,color:"#8e8e93"}}>{rows.length}件　{count}人</div>
+                          <div style={{fontSize:16,fontWeight:700}}>¥{total.toLocaleString()}</div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── 業務モード：単価設定 ── */}
+        {view==="settings"&&role==="業務"&&(
+          <div>
+            {/* 業者ごとのカテゴリ管理＋単価設定 */}
+            <div style={S.sectionLabel}>業者・工程別 単価設定（1人あたり）</div>
+            {vendors.map(v=>{
+              const priceMap=(data.unitPrices||{})[v]||{};
+              const cats=getVendorCategories(vendorPriceCategories,v);
+              const isOpen=selectedCatVendor===v;
+              return (
+                <div key={v} style={{...S.vendorCard,borderTopColor:vendorColor(v,vendors)}}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                    <div style={{...S.vendorName,color:vendorColor(v,vendors)}}>{v}</div>
+                    <button style={isOpen?S.editModeOnBtn:S.editModeOffBtn} onClick={()=>{ setSelectedCatVendor(isOpen?null:v); setEditingCatIdx(null); setNewCatName(""); }}>
+                      {isOpen?"閉じる":"⚙️ カテゴリ"}
+                    </button>
+                  </div>
+
+                  {/* カテゴリ編集パネル */}
+                  {isOpen&&(
+                    <div style={{background:"#f9f9f9",borderRadius:8,padding:"10px",margin:"8px 0",border:"1px solid #e5e5ea"}}>
+                      <div style={{fontSize:11,color:"#8e8e93",marginBottom:8}}>このカテゴリは{v}専用です</div>
+                      {cats.map((cat,idx)=>(
+                        <div key={idx} style={{display:"flex",alignItems:"center",gap:6,marginBottom:6}}>
+                          {editingCatIdx===idx ? (
+                            <>
+                              <input style={{...S.formInput,flex:1,fontSize:12,padding:"4px 7px"}} value={editingCatName} onChange={e=>setEditingCatName(e.target.value)}/>
+                              <button style={{...S.btnPrimary,padding:"4px 8px",fontSize:11}} onClick={()=>renamePriceCategory(v,idx,editingCatName)}>確定</button>
+                              <button style={{...S.btnGhost,padding:"4px 6px",fontSize:11}} onClick={()=>{ setEditingCatIdx(null); setEditingCatName(""); }}>×</button>
+                            </>
+                          ):(
+                            <>
+                              <span style={{flex:1,fontSize:13,fontWeight:600}}>{cat}</span>
+                              <button style={{fontSize:11,color:"#007aff",background:"none",border:"none",cursor:"pointer"}} onClick={()=>{ setEditingCatIdx(idx); setEditingCatName(cat); }}>編集</button>
+                              <button style={S.delBtn} onClick={()=>deletePriceCategory(v,idx)}>✕</button>
+                            </>
+                          )}
+                        </div>
+                      ))}
+                      <div style={{display:"flex",gap:6,marginTop:8}}>
+                        <input style={{...S.formInput,flex:1,fontSize:12}} value={newCatName} onChange={e=>setNewCatName(e.target.value)} placeholder="カテゴリを追加"/>
+                        <button style={{...S.btnPrimary,padding:"6px 10px",fontSize:12}} onClick={()=>addPriceCategory(v)}>追加</button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* 単価入力 */}
+                  {cats.map(cat=>{
+                    const current=priceMap[cat]||0;
+                    const key=`${v}_${cat}`;
+                    return (
+                      <div key={cat} style={{display:"flex",alignItems:"center",gap:8,marginTop:8,paddingTop:8,borderTop:"0.5px solid #f2f2f7"}}>
+                        <span style={{fontSize:12,fontWeight:600,color:"#3c3c43",minWidth:52}}>{cat}</span>
+                        <span style={{fontSize:11,color:"#8e8e93",minWidth:52}}>¥{current.toLocaleString()}</span>
+                        <input style={{...S.formInput,flex:1,fontSize:13,padding:"6px 8px"}} type="number" placeholder="単価"
+                          value={editingPrice[key]||""} onChange={e=>setEditingPrice(p=>({...p,[key]:e.target.value}))}/>
+                        <button style={{...S.btnPrimary,padding:"6px 10px",fontSize:12}} onClick={()=>{
+                          const prices=data.unitPrices||{};
+                          const vmap=prices[v]||{};
+                          updateData({...data, unitPrices:{...prices,[v]:{...vmap,[cat]:Number(editingPrice[key]||0)}}});
+                          setEditingPrice(p=>({...p,[key]:""}));
+                          showToast(`${v} ${cat}の単価を保存しました`);
+                        }}>保存</button>
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+      </main>
+      {toast&&<div style={{...S.toast,background:toastType==="err"?"#ff3b30":"#1c1c1e"}}>{toast}</div>}
+    </div>
+  );
+}
+
+// ── メンバー管理コンポーネント ──────────────────
+function MemberManager({ vendorId, members, onAdd, onDelete }) {
+  const [newName, setNewName] = useState("");
+  return (
+    <div>
+      <div style={{display:"flex",gap:8,marginBottom:12}}>
+        <input style={{...S.formInput,flex:1}} value={newName} onChange={e=>setNewName(e.target.value)} placeholder="メンバー名を入力"/>
+        <button style={S.btnPrimary} onClick={()=>{ onAdd(newName); setNewName(""); }}>追加</button>
+      </div>
+      {members.length===0&&<div style={S.empty}>メンバー未登録</div>}
+      {members.map(m=>(
+        <div key={m} style={{...S.reqCard,borderLeftColor:"#007aff",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+          <span style={{fontSize:15,fontWeight:600,color:"#1c1c1e"}}>👤 {m}</span>
+          <button style={S.delBtn} onClick={()=>onDelete(m)}>✕</button>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ── スタイル ──────────────────────────────────────
+const S = {
+  root:{ fontFamily:"'Noto Sans JP','Hiragino Sans',sans-serif",background:"#f7f7f8",overflowX:"hidden",width:"100%",minHeight:"100vh",maxWidth:430,margin:"0 auto" },
+  splash:{ padding:"48px 20px 32px",minHeight:"100vh",display:"flex",flexDirection:"column",alignItems:"center",width:"100%",boxSizing:"border-box" },
+  splashIcon:{ fontSize:52,marginBottom:10 },
+  splashTitle:{ fontSize:24,fontWeight:900,color:"#1c1c1e",letterSpacing:"0.05em",marginBottom:6 },
+  splashSub:{ fontSize:10,color:"#8e8e93",marginBottom:24,textAlign:"center",letterSpacing:"0.1em",fontWeight:500 },
+  cloudChip:{ display:"flex",alignItems:"center",gap:8,background:"#fff",borderRadius:6,padding:"7px 14px",fontSize:10,fontWeight:300,color:"#888888",marginBottom:28,boxShadow:"0 1px 4px rgba(0,0,0,0.05)",letterSpacing:"0.08em",border:"1px solid #eeeeee" },
+  chipBtn:{ fontSize:10,padding:"3px 9px",background:"#1a1a1a",color:"#fff",border:"none",borderRadius:4,cursor:"pointer",marginLeft:4,letterSpacing:"0.05em",fontWeight:300 },
+  roleSection:{ width:"100%",maxWidth:360,display:"flex",flexDirection:"column",gap:10,position:"relative",zIndex:10 },
+  roleCard:{ width:"100%",background:"#fff",border:"1px solid #eeeeee",borderRadius:12,padding:"16px 18px",display:"flex",alignItems:"center",gap:14,cursor:"pointer",boxShadow:"0 1px 6px rgba(0,0,0,0.04)",textAlign:"left" },
+  roleCardManager:{ background:"#fafafa" },
+  roleCardGyomu:{ background:"#fafafa" },
+  roleIcon:{ fontSize:26,flexShrink:0 },
+  roleLabel:{ fontSize:14,fontWeight:400,color:"#1a1a1a",letterSpacing:"0.08em" },
+  roleDesc:{ fontSize:10,fontWeight:300,color:"#aaaaaa",marginTop:2,letterSpacing:"0.05em" },
+  roleChev:{ fontSize:16,color:"#dddddd",marginLeft:"auto",flexShrink:0,fontWeight:300 },
+  header:{ background:"rgba(255,255,255,0.95)",backdropFilter:"blur(20px)",padding:"13px 18px 9px",display:"flex",justifyContent:"space-between",alignItems:"flex-end",borderBottom:"0.5px solid #d1d1d6",position:"sticky",top:0,zIndex:10 },
+  headerTitle:{ fontSize:15,fontWeight:300,color:"#1a1a1a",letterSpacing:"0.18em" },
+  headerSub:{ fontSize:9,fontWeight:300,color:"#bbbbbb",marginTop:1,letterSpacing:"0.1em" },
+  headerBtn:{ fontSize:10,padding:"5px 12px",background:"#1a1a1a",color:"#fff",border:"none",borderRadius:4,cursor:"pointer",fontWeight:300,letterSpacing:"0.08em" },
+  tabBar:{ display:"flex",background:"#fff",borderBottom:"1px solid #f0f0f0",overflowX:"auto" },
+  tab:{ flex:1,padding:"10px 4px 8px",border:"none",background:"none",color:"#bbbbbb",cursor:"pointer",fontSize:9,fontWeight:300,letterSpacing:"0.1em",display:"flex",flexDirection:"column",alignItems:"center",gap:1,minWidth:60 },
+  tabActive:{ color:"#1a1a1a",borderBottom:"1.5px solid #1a1a1a",fontWeight:500 },
+  main:{ padding:"14px 12px 40px",boxSizing:"border-box",width:"100%" },
+  calNav:{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10,padding:"0 2px" },
+  calNavTitle:{ fontSize:14,fontWeight:300,color:"#1a1a1a",letterSpacing:"0.15em" },
+  calNavBtn:{ background:"none",border:"none",fontSize:20,color:"#aaaaaa",cursor:"pointer",padding:"0 6px",lineHeight:1,fontWeight:300 },
+  refreshBtn:{ width:"100%",padding:"8px",background:"#fff",border:"1px solid #eeeeee",borderRadius:6,fontSize:10,color:"#aaaaaa",fontWeight:300,cursor:"pointer",marginBottom:10,fontFamily:"inherit",letterSpacing:"0.08em" },
+  calGrid:{ display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:2,marginBottom:6 },
+  calDow:{ textAlign:"center",fontSize:10,fontWeight:600,paddingBottom:3 },
+  calCell:{ background:"#fff",borderRadius:6,padding:"3px 1px 4px",minHeight:52,display:"flex",flexDirection:"column",alignItems:"center",border:"1px solid #f5f5f5",cursor:"pointer",fontFamily:"inherit" },
+  calCellToday:{ background:"#f8f8f8" },
+  calCellSel:{ background:"#f0f0f0",outline:"1.5px solid #1a1a1a" },
+  calCellPast:{ background:"#f9f9f9" },
+  calCellHighlight:{ background:"#fff8f0", outline:"1.5px solid #ddaa55" },
+  calNum:{ width:22,height:22,borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,marginBottom:1 },
+  calCount:{ fontSize:8,color:"#888",fontWeight:300,background:"#f5f5f5",borderRadius:3,padding:"1px 2px" },
+  calDot:{ width:4,height:4,borderRadius:"50%" },
+  detailCard:{ background:"#fff",borderRadius:12,padding:"12px",marginTop:10,boxShadow:"0 1px 4px rgba(0,0,0,0.06)",overflow:"hidden",boxSizing:"border-box" },
+  detailTitle:{ fontSize:13,fontWeight:300,color:"#1a1a1a",letterSpacing:"0.1em" },
+  addDayBtn:{ fontSize:10,padding:"4px 10px",background:"#1a1a1a",color:"#fff",border:"none",borderRadius:4,cursor:"pointer",fontWeight:300,letterSpacing:"0.06em" },
+  legend:{ display:"flex",flexWrap:"wrap",gap:8,padding:"6px 2px",marginTop:4 },
+  legendItem:{ display:"flex",alignItems:"center",gap:4,fontSize:10,color:"#8e8e93" },
+  reqCard:{ background:"#fff",borderRadius:10,padding:"10px 12px",marginBottom:7,borderLeft:"3px solid #c7c7cc",boxShadow:"0 1px 3px rgba(0,0,0,0.05)" },
+  reqName:{ fontSize:14,fontWeight:400,color:"#1a1a1a",letterSpacing:"0.04em" },
+  reqDate:{ fontSize:12,fontWeight:400,color:"#8e8e93" },
+  reqMeta:{ fontSize:11,color:"#8e8e93",marginTop:2 },
+  reqNote:{ fontSize:10,color:"#aeaeb2",marginTop:2 },
+  bukken:{ fontSize:11,color:"#6d4c00",background:"#fff8e6",borderRadius:4,padding:"1px 6px",display:"inline-block",marginTop:2,fontWeight:500 },
+  kouteiChip:{ fontSize:10,color:"#0055c1",background:"#eef3ff",borderRadius:4,padding:"1px 6px",display:"inline-block",marginTop:2 },
+  chipRow:{ display:"flex",flexWrap:"wrap",gap:4,marginTop:5,alignItems:"center" },
+  pill:{ fontSize:10,borderRadius:5,padding:"2px 7px",background:"#f2f2f7",color:"#8e8e93" },
+  disclosedChip:{ fontSize:9,borderRadius:4,padding:"2px 6px",background:"#e8faf0",color:"#1d8348",fontWeight:600 },
+  formCard:{ background:"#fff",borderRadius:12,padding:"18px 14px",boxShadow:"0 1px 4px rgba(0,0,0,0.06)" },
+  formTitle:{ fontSize:14,fontWeight:400,color:"#1a1a1a",letterSpacing:"0.12em" },
+  formRow:{ marginBottom:10 },
+  formLabel:{ display:"block",fontSize:9,color:"#aaaaaa",marginBottom:3,fontWeight:300,letterSpacing:"0.12em",textTransform:"uppercase" },
+  formInput:{ width:"100%",padding:"9px 11px",borderRadius:6,border:"1px solid #eeeeee",fontSize:14,boxSizing:"border-box",background:"#fafafa",fontFamily:"inherit",fontWeight:300 },
+  formHint:{ fontSize:10,color:"#ff9500",marginTop:3 },
+  nameDrop:{ position:"absolute",top:"100%",left:0,right:0,background:"#fff",border:"1px solid #e5e5ea",borderRadius:9,zIndex:20,boxShadow:"0 4px 12px rgba(0,0,0,0.10)",overflow:"hidden" },
+  nameDropItem:{ padding:"11px 14px",fontSize:14,color:"#1c1c1e",cursor:"pointer",borderBottom:"0.5px solid #f2f2f7" },
+  nameDropClose:{ padding:"9px 14px",fontSize:12,color:"#8e8e93",textAlign:"center",cursor:"pointer" },
+  closeBtn:{ background:"none",border:"none",fontSize:17,color:"#8e8e93",cursor:"pointer",padding:"0 4px" },
+  btnPrimary:{ padding:"9px 18px",background:"#1a1a1a",color:"#fff",border:"none",borderRadius:6,fontSize:13,fontWeight:400,cursor:"pointer",fontFamily:"inherit",letterSpacing:"0.05em" },
+  btnGhost:{ padding:"9px 14px",background:"#f5f5f5",color:"#888888",border:"1px solid #eeeeee",borderRadius:6,fontSize:13,cursor:"pointer",fontFamily:"inherit",fontWeight:300 },
+  btnAssign:{ fontSize:12,padding:"6px 12px",background:"#f2f2f7",border:"none",borderRadius:7,cursor:"pointer",color:"#007aff",fontWeight:500,marginTop:7,fontFamily:"inherit" },
+  delBtn:{ background:"#fff0f0",border:"none",fontSize:12,color:"#ff3b30",cursor:"pointer",borderRadius:6,width:26,height:26,display:"flex",alignItems:"center",justifyContent:"center" },
+  undoBtn:{ background:"#f2f2f7",border:"none",fontSize:12,color:"#8e8e93",cursor:"pointer",borderRadius:6,width:26,height:26,display:"flex",alignItems:"center",justifyContent:"center" },
+  editSmBtn:{ background:"#f0f7ff",border:"none",fontSize:12,cursor:"pointer",borderRadius:6,width:26,height:26,display:"flex",alignItems:"center",justifyContent:"center" },
+  discloseBtnOff:{ fontSize:13,padding:"8px 16px",background:"#ff9500",color:"#fff",border:"none",borderRadius:6,cursor:"pointer",marginTop:8,fontFamily:"inherit",fontWeight:600,width:"100%",display:"block",letterSpacing:"0.05em" },
+  discloseBtnOn:{ fontSize:11,padding:"5px 12px",background:"#e8faf0",color:"#1d8348",border:"1px solid #a3e4b8",borderRadius:6,cursor:"pointer",marginTop:8,fontFamily:"inherit",fontWeight:500 },
+  sectionLabel:{ fontSize:9,fontWeight:300,color:"#aaaaaa",marginBottom:7,paddingLeft:2,letterSpacing:"0.15em",textTransform:"uppercase" },
+  empty:{ textAlign:"center",color:"#aeaeb2",fontSize:13,padding:"20px 0" },
+  splitPanel:{ background:"#f9f9f9",borderRadius:9,padding:"10px",marginTop:7,border:"1px solid #e5e5ea",boxSizing:"border-box",width:"100%" },
+  splitHint:{ fontSize:11,color:"#8e8e93",marginBottom:7 },
+  splitRow:{ display:"flex",alignItems:"center",gap:7,marginBottom:6 },
+  splitUnit:{ fontSize:11,color:"#aeaeb2" },
+  numInput:{ width:50,padding:"5px 7px",borderRadius:7,border:"1px solid #e5e5ea",fontSize:14,textAlign:"center",fontFamily:"inherit" },
+  vendorCard:{ background:"#fff",borderRadius:12,padding:"12px",marginBottom:9,borderTop:"3px solid",boxShadow:"0 1px 3px rgba(0,0,0,0.05)" },
+  vendorName:{ fontSize:13,fontWeight:400,marginBottom:2,letterSpacing:"0.08em" },
+  vendorStat:{ fontSize:11,color:"#8e8e93",marginBottom:7,paddingBottom:7,borderBottom:"0.5px solid #f2f2f7" },
+  vendorRow:{ padding:"5px 0",borderBottom:"0.5px solid #f9f9f9" },
+  vendorEditPanel:{ background:"#fff",borderRadius:12,padding:"12px",marginBottom:10,boxShadow:"0 1px 3px rgba(0,0,0,0.05)" },
+  vendorEditRow:{ display:"flex",alignItems:"center",gap:7,marginBottom:7 },
+  orderBtn:{ background:"#f2f2f7",border:"none",borderRadius:5,width:26,height:26,cursor:"pointer",fontSize:13,color:"#3c3c43",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"inherit" },
+  editModeOffBtn:{ fontSize:12,padding:"4px 12px",background:"#f2f2f7",color:"#007aff",border:"none",borderRadius:12,cursor:"pointer",fontWeight:500 },
+  editModeOnBtn:{ fontSize:12,padding:"4px 12px",background:"#007aff",color:"#fff",border:"none",borderRadius:12,cursor:"pointer",fontWeight:600 },
+  headerBadgeRed:{ fontSize:9,fontWeight:400,background:"#cc3333",color:"#fff",borderRadius:4,padding:"2px 8px",letterSpacing:"0.06em" },
+  headerBadgeOrange:{ fontSize:9,fontWeight:400,background:"#cc7700",color:"#fff",borderRadius:4,padding:"2px 8px",letterSpacing:"0.06em" },
+  toast:{ position:"fixed",bottom:24,left:"50%",transform:"translateX(-50%)",color:"#fff",borderRadius:4,padding:"9px 20px",fontSize:11,fontWeight:300,letterSpacing:"0.08em",zIndex:100,boxShadow:"0 4px 16px rgba(0,0,0,0.15)",whiteSpace:"nowrap" },
+  pinOverlay:{ position:"fixed",inset:0,background:"#f2f2f7",display:"flex",alignItems:"center",justifyContent:"center",zIndex:999 },
+  pinSheet:{ width:"100%",maxWidth:320,padding:"36px 20px 28px",textAlign:"center" },
+  pinIcon:{ fontSize:44,marginBottom:12 },
+  pinTitle:{ fontSize:17,fontWeight:300,color:"#1a1a1a",marginBottom:3,letterSpacing:"0.12em" },
+  pinSub:{ fontSize:10,fontWeight:300,color:"#aaaaaa",marginBottom:32,letterSpacing:"0.08em" },
+  pinDots:{ display:"flex",gap:14,justifyContent:"center",marginBottom:36 },
+  pinDot:{ width:14,height:14,borderRadius:"50%",transition:"background 0.15s" },
+  pinKeypad:{ display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:10,maxWidth:260,margin:"0 auto" },
+  pinKey:{ background:"#fff",border:"1px solid #eeeeee",borderRadius:50,width:"100%",aspectRatio:"1",fontSize:20,fontWeight:300,color:"#1a1a1a",cursor:"pointer",boxShadow:"0 1px 4px rgba(0,0,0,0.06)",fontFamily:"inherit" },
+  pinKeyEmpty:{ background:"transparent",boxShadow:"none",cursor:"default" },
+  pinCancel:{ marginTop:20,background:"none",border:"none",fontSize:14,color:"#8e8e93",cursor:"pointer",fontFamily:"inherit" },
+  gyomuRangeBar:{ display:"flex",gap:8,marginBottom:10 },
+  rangeBtn:{ flex:1,padding:"8px",background:"#fff",border:"1px solid #e5e5ea",borderRadius:9,fontSize:13,color:"#8e8e93",cursor:"pointer",fontFamily:"inherit" },
+  rangeBtnActive:{ background:"#007aff",color:"#fff",border:"1px solid #007aff",fontWeight:600 },
+  weekNav:{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10,background:"#fff",borderRadius:9,padding:"6px 4px",boxShadow:"0 1px 3px rgba(0,0,0,0.05)" },
+  gyomuTable:{ background:"#fff",borderRadius:12,overflow:"hidden",boxShadow:"0 1px 3px rgba(0,0,0,0.06)",marginBottom:10 },
+  gyomuTableHeader:{ display:"flex",gap:4,padding:"8px 12px",background:"#f2f2f7",fontSize:11,fontWeight:600,color:"#8e8e93" },
+  gyomuRow:{ display:"flex",gap:4,padding:"10px 12px",borderBottom:"0.5px solid #f2f2f7",alignItems:"center" },
+  gyomuTotal:{ background:"#1c1c1e",color:"#fff",borderRadius:12,padding:"14px 16px",display:"flex",justifyContent:"space-between",alignItems:"center",fontSize:14,fontWeight:600 },
+};
+
+const root = ReactDOM.createRoot(document.getElementById('root'));
+root.render(<App/>);
+</script>
+</body>
+</html>
