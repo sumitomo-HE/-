@@ -1194,7 +1194,10 @@ function App() {
               }}
               renderSplitUI={role==="管理者"?((r)=><SplitUI r={r}/>):null}
               renderDiscloseBtn={role==="管理者"?((r)=>{
-                const asgn=data.assignments[r.id]||{};
+                const asgn=data.assignments[r.id];
+                if(!asgn) return (
+                  <button style={S.discloseBtnOff} disabled>未割当</button>
+                );
                 return (
                   <div>
                     {Object.entries(asgn).map(([vid,cnt])=>{
