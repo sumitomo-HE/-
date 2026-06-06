@@ -760,35 +760,25 @@ function RegisterForm({ initialDate, vendors, names, onSave, onCancel, syncing }
       </div>
       <div style={S.formRow}>
         <label style={S.formLabel}>案内図（PNG/JPG・1枚）</label>
-        <div style={{border:"1.5px dashed #dddddd",borderRadius:8,padding:"16px",textAlign:"center",background:"#fafafa",cursor:"pointer",position:"relative"}}
-          onClick={()=>document.getElementById("annaizu-input").click()}>
-          {form.annaizu ? (
-            <div>
-              <img src={form.annaizu} style={{maxWidth:"100%",maxHeight:200,borderRadius:6,marginBottom:8}}/>
-              <div style={{fontSize:11,color:"#aaa"}}>タップして変更</div>
-            </div>
-          ) : (
-            <div>
-              <div style={{fontSize:24,marginBottom:6}}>+</div>
-              <div style={{fontSize:12,color:"#aaaaaa"}}>タップして画像を選択</div>
-              <div style={{fontSize:10,color:"#cccccc",marginTop:4}}>PNG / JPG（1MB以下推奨）</div>
-            </div>
-          )}
-          <input id="annaizu-input" type="file" accept="image/png,image/jpeg"
-            style={{position:"absolute",opacity:0,width:"100%",height:"100%",top:0,left:0,cursor:"pointer"}}
+        {form.annaizu ? (
+          <div>
+            <img src={form.annaizu} style={{maxWidth:"100%",maxHeight:200,borderRadius:8,marginBottom:8,border:"1px solid #eee"}}/>
+            <button style={{fontSize:12,color:"#ff3b30",background:"none",border:"none",cursor:"pointer",padding:0,display:"block",marginBottom:6}}
+              onClick={()=>setForm(f=>({...f,annaizu:""}))}>画像を削除</button>
+          </div>
+        ):null}
+        <label style={{display:"block",width:"100%",padding:"14px",textAlign:"center",border:"1.5px dashed #ddd",borderRadius:8,background:"#fafafa",cursor:"pointer",fontSize:13,color:"#888"}}>
+          {form.annaizu?"別の画像を選択":"+ 画像を選択（PNG/JPG）"}
+          <input type="file" accept="image/*" style={{display:"none"}}
             onChange={e=>{
               const file=e.target.files[0];
               if(!file) return;
-              if(file.size>2*1024*1024){ alert("ファイルサイズが大きすぎます（2MB以下にしてください）"); return; }
+              if(file.size>2*1024*1024){ alert("2MB以下の画像を選択してください"); return; }
               const reader=new FileReader();
               reader.onload=ev=>setForm(f=>({...f,annaizu:ev.target.result}));
               reader.readAsDataURL(file);
             }}/>
-        </div>
-        {form.annaizu&&(
-          <button style={{fontSize:11,color:"#ff3b30",background:"none",border:"none",cursor:"pointer",marginTop:4,padding:0}}
-            onClick={()=>setForm(f=>({...f,annaizu:""}))}>画像を削除</button>
-        )}
+        </label>
       </div>
       <button style={{...S.btnPrimary,width:"100%",marginTop:16,padding:"14px",fontSize:16,opacity:syncing?0.6:1}} onClick={handleSave} disabled={syncing}>
         {syncing?"保存中…":"登録する"}
