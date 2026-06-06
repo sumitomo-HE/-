@@ -469,6 +469,7 @@ function CalendarView({ currentYM, setCurrentYM, requestsByDate, assignments, ve
                 {r.daiku&&<div style={{fontSize:11,color:"#8e8e93",marginTop:2}}>大工：{r.daiku}</div>}
                 {r.rekkaa&&<div style={{fontSize:11,color:"#8e8e93",marginTop:2}}>レッカー：{r.rekkaa}</div>}
                 {r.note&&<div style={S.reqNote}>{r.note}</div>}
+                {r.annaizu&&<img src={r.annaizu} style={{maxWidth:"100%",borderRadius:6,marginTop:6,border:"1px solid #eeeeee"}}/>}
                 <div style={{...S.chipRow,justifyContent:"space-between"}}>
                   <div style={S.chipRow}>
                     {a ? Object.entries(a).map(([v,c])=>(
@@ -608,6 +609,38 @@ function RegisterForm({ initialDate, vendors, names, onSave, onCancel, syncing }
       <div style={S.formRow}>
         <label style={S.formLabel}>備考</label>
         <input style={S.formInput} value={form.note} onChange={e=>setForm(f=>({...f,note:e.target.value}))} placeholder="メモ"/>
+      </div>
+      <div style={S.formRow}>
+        <label style={S.formLabel}>案内図（PNG/JPG・1枚）</label>
+        <div style={{border:"1.5px dashed #dddddd",borderRadius:8,padding:"16px",textAlign:"center",background:"#fafafa",cursor:"pointer",position:"relative"}}
+          onClick={()=>document.getElementById("annaizu-input").click()}>
+          {form.annaizu ? (
+            <div>
+              <img src={form.annaizu} style={{maxWidth:"100%",maxHeight:200,borderRadius:6,marginBottom:8}}/>
+              <div style={{fontSize:11,color:"#aaa"}}>タップして変更</div>
+            </div>
+          ) : (
+            <div>
+              <div style={{fontSize:24,marginBottom:6}}>+</div>
+              <div style={{fontSize:12,color:"#aaaaaa"}}>タップして画像を選択</div>
+              <div style={{fontSize:10,color:"#cccccc",marginTop:4}}>PNG / JPG（1MB以下推奨）</div>
+            </div>
+          )}
+          <input id="annaizu-input" type="file" accept="image/png,image/jpeg"
+            style={{position:"absolute",opacity:0,width:"100%",height:"100%",top:0,left:0,cursor:"pointer"}}
+            onChange={e=>{
+              const file=e.target.files[0];
+              if(!file) return;
+              if(file.size>2*1024*1024){ alert("ファイルサイズが大きすぎます（2MB以下にしてください）"); return; }
+              const reader=new FileReader();
+              reader.onload=ev=>setForm(f=>({...f,annaizu:ev.target.result}));
+              reader.readAsDataURL(file);
+            }}/>
+        </div>
+        {form.annaizu&&(
+          <button style={{fontSize:11,color:"#ff3b30",background:"none",border:"none",cursor:"pointer",marginTop:4,padding:0}}
+            onClick={()=>setForm(f=>({...f,annaizu:""}))}>画像を削除</button>
+        )}
       </div>
       <button style={{...S.btnPrimary,width:"100%",marginTop:16,padding:"14px",fontSize:16,opacity:syncing?0.6:1}} onClick={handleSave} disabled={syncing}>
         {syncing?"保存中…":"登録する"}
@@ -800,8 +833,16 @@ function App() {
   };
 
   const handleRegister = async (formData) => {
+    // 30日以上前の案件の画像を自動削除
+    const thirtyDaysAgo = new Date(); thirtyDaysAgo.setDate(thirtyDaysAgo.getDate()-30);
+    const cleanedRequests = data.requests.map(r => {
+      if(r.annaizu && new Date(r.date) < thirtyDaysAgo) {
+        return {...r, annaizu:""};
+      }
+      return r;
+    });
     const req={ id:Date.now().toString(), ...formData, createdAt:new Date().toISOString(), disclosed:false };
-    await updateData({...data, requests:[...data.requests, req]});
+    await updateData({...data, requests:[...cleanedRequests, req]});
     const newNames=[formData.name,...names.filter(n=>n!==formData.name)].slice(0,20);
     setNames(newNames); saveNames(newNames);
     setShowRegisterFor(null); setView("calendar"); showToast("登録しました");
