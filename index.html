@@ -39,7 +39,7 @@ const TSUBO_OPTIONS = ["","30坪未満","30坪","35坪","40坪","45坪","50坪",
 const PRICE_CATEGORIES_DEFAULT = ["コラム", "建て方", "１日", "ハーフ"];
 const MANAGER_PASS = "0228";
 const GYOMU_PASS = "0228";
-const API_KEY = "$2a$10$hReg5x0XFfuickDEhWh2VulvIHlKjtgqDYmlR65v17SFJ9qGTw.PG";
+const API_KEY = "$2a$10$1O88cF7wXbf2pSTZZxqBr.uqcIg5ILcQf9fGrbZmJyf780h0jIqq.";
 const JSONBIN_BASE = "https://api.jsonbin.io/v3";
 const STORAGE_KEY = "荷揚げv6";
 const PRICE_CAT_KEY = "荷揚げ_vendorPriceCategories";
@@ -727,7 +727,7 @@ function App() {
   const pushToCloud = async (nd,id) => {
     const tid=id||binId; if(!tid) return; setSyncing(true);
     try { await updateBin(tid,nd); setSyncOk(true); }
-    catch { showToast("保存失敗","err"); } finally { setSyncing(false); }
+    catch { showToast("クラウドに登録中…"); } finally { setSyncing(false); }
   };
   const setupCloud = async () => {
     setSyncing(true);
@@ -1727,8 +1727,8 @@ const S = {
   delBtn:{ background:"#fff0f0",border:"none",fontSize:12,color:"#ff3b30",cursor:"pointer",borderRadius:6,width:26,height:26,display:"flex",alignItems:"center",justifyContent:"center" },
   undoBtn:{ background:"#f2f2f7",border:"none",fontSize:12,color:"#8e8e93",cursor:"pointer",borderRadius:6,width:26,height:26,display:"flex",alignItems:"center",justifyContent:"center" },
   editSmBtn:{ background:"#f0f7ff",border:"none",fontSize:12,cursor:"pointer",borderRadius:6,width:26,height:26,display:"flex",alignItems:"center",justifyContent:"center" },
-  discloseBtnOff:{ fontSize:11,padding:"4px 10px",background:"#fff9e6",color:"#b07d00",border:"1px solid #f5d76e",borderRadius:6,cursor:"pointer",marginTop:5,fontFamily:"inherit" },
-  discloseBtnOn:{ fontSize:11,padding:"4px 10px",background:"#e8faf0",color:"#1d8348",border:"1px solid #a3e4b8",borderRadius:6,cursor:"pointer",marginTop:5,fontFamily:"inherit" },
+  discloseBtnOff:{ fontSize:13,padding:"8px 16px",background:"#ff9500",color:"#fff",border:"none",borderRadius:6,cursor:"pointer",marginTop:8,fontFamily:"inherit",fontWeight:600,width:"100%",display:"block",letterSpacing:"0.05em" },
+  discloseBtnOn:{ fontSize:11,padding:"5px 12px",background:"#e8faf0",color:"#1d8348",border:"1px solid #a3e4b8",borderRadius:6,cursor:"pointer",marginTop:8,fontFamily:"inherit",fontWeight:500 },
   sectionLabel:{ fontSize:9,fontWeight:300,color:"#aaaaaa",marginBottom:7,paddingLeft:2,letterSpacing:"0.15em",textTransform:"uppercase" },
   empty:{ textAlign:"center",color:"#aeaeb2",fontSize:13,padding:"20px 0" },
   splitPanel:{ background:"#f9f9f9",borderRadius:9,padding:"10px",marginTop:7,border:"1px solid #e5e5ea",boxSizing:"border-box",width:"100%" },
