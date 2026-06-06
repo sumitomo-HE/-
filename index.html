@@ -1145,8 +1145,12 @@ function App() {
       Object.entries(a).forEach(([vid,cnt])=>{
         const cat=inferPriceCategory(r.koutei,vid);
         const priceMap=(data.unitPrices||{})[vid]||{};
-        const price=priceMap[cat]||0;
-        rows.push({ date:r.date, bukken:r.bukken||"物件名未入力", vendor:vid, count:cnt, price, total:cnt*price, koutei:r.koutei, cat, reqId:r.id });
+        const unitPrice=priceMap[cat]||0;
+        // 業者が入力した請求金額があればそちらを優先
+        const vendorInputAmount=(data.vendorAmounts||{})[r.id]?(data.vendorAmounts[r.id][vid]||0):0;
+        const price = vendorInputAmount ? vendorInputAmount : unitPrice*cnt;
+        const total = vendorInputAmount ? vendorInputAmount : unitPrice*cnt;
+        rows.push({ date:r.date, bukken:r.bukken||"物件名未入力", vendor:vid, count:cnt, price:vendorInputAmount||unitPrice, total, koutei:r.koutei, cat, reqId:r.id, isVendorInput:!!vendorInputAmount });
       });
     });
     rows.sort((a,b)=>a.date.localeCompare(b.date));
@@ -1757,7 +1761,7 @@ function App() {
                   <span style={{flex:1,textAlign:"center",fontSize:12,color:vendorColor(row.vendor,vendors),fontWeight:600}}>{row.vendor}</span>
                   <span style={{flex:1,textAlign:"center",fontSize:13}}>{row.count}人</span>
                   <span style={{flex:1,textAlign:"right",fontSize:13,fontWeight:600}}>
-                    {row.price>0?`¥${(row.total).toLocaleString()}`:"未設定"}
+                    {row.total>0?`¥${row.total.toLocaleString()}`:row.isVendorInput?"¥0":"未設定"}
                   </span>
                 </div>
               ))}
