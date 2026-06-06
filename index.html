@@ -1193,36 +1193,42 @@ function App() {
                 showToast("メンバーを割り当てました");
               }}
               renderSplitUI={role==="管理者"?((r)=><SplitUI r={r}/>):null}
-              renderDiscloseBtn={role==="管理者"?((r)=>(
-                <div>
-                  {Object.entries(data.assignments[r.id]||{}).map(([vid,cnt])=>{
-                    const priceMap=(data.unitPrices||{})[vid]||{};
-                    const cat=inferPriceCategory(r.koutei,vid);
-                    const price=priceMap[cat]||0;
-                    const total=cnt*price;
-                    return (
-                      <div key={vid} style={{marginTop:6}}>
-                        {price>0&&<div style={{fontSize:11,color:"#2d9e6b",marginBottom:4,fontWeight:500}}>
-                          {vid}：{cnt}人×¥{price.toLocaleString()}＝¥{total.toLocaleString()}
-                        </div>}
-                        <MemberAssignCard
-                          r={r} a={data.assignments[r.id]} vendorId={vid} vendors={vendors}
-                          vendorMembers={data.vendorMembers[vid]||[]}
-                          initialSelected={(data.memberAssignments[r.id]||{})[vid]||[]}
-                          onDelete={()=>deleteRequest(r.id)}
-                          onSave={(reqId,members)=>{
-                            const ma=data.memberAssignments||{};
-                            updateData({...data, memberAssignments:{...ma,[reqId]:{...(ma[reqId]||{}),[vid]:members}}});
-                            showToast("メンバーを割り当てました");
-                          }}/>
-                      </div>
-                    );
-                  })}
-                  <button style={r.disclosed?S.discloseBtnOn:S.discloseBtnOff} onClick={()=>toggleDisclose(r.id)}>
-                    {r.disclosed?"開示済 ✓":"開示する"}
-                  </button>
-                </div>
-              )):null}
+              renderDiscloseBtn={role==="管理者"?((r)=>{
+                const asgn=data.assignments[r.id]||{};
+                return (
+                  <div>
+                    {Object.entries(asgn).map(([vid,cnt])=>{
+                      const priceMap=(data.unitPrices||{})[vid]||{};
+                      const cat=inferPriceCategory(r.koutei,vid);
+                      const price=priceMap[cat]||0;
+                      const total=cnt*price;
+                      const vMembers=data.vendorMembers[vid]||[];
+                      const initSel=(data.memberAssignments||{})[r.id]?(data.memberAssignments[r.id][vid]||[]):[];
+                      return (
+                        <div key={vid} style={{marginTop:6,width:"100%",boxSizing:"border-box"}}>
+                          {price>0&&<div style={{fontSize:11,color:"#2d9e6b",marginBottom:4,fontWeight:500}}>
+                            {vid}：{cnt}人×¥{price.toLocaleString()}＝¥{total.toLocaleString()}
+                          </div>}
+                          <MemberAssignCard
+                            r={r} a={asgn} vendorId={vid} vendors={vendors}
+                            vendorMembers={vMembers}
+                            initialSelected={initSel}
+                            onDelete={()=>deleteRequest(r.id)}
+                            onSave={(reqId,members)=>{
+                              const ma={...(data.memberAssignments||{})};
+                              ma[reqId]={...(ma[reqId]||{}),[vid]:members};
+                              updateData({...data, memberAssignments:ma});
+                              showToast("メンバーを割り当てました");
+                            }}/>
+                        </div>
+                      );
+                    })}
+                    <button style={r.disclosed?S.discloseBtnOn:S.discloseBtnOff} onClick={()=>toggleDisclose(r.id)}>
+                      {r.disclosed?"開示済 ✓":"開示する"}
+                    </button>
+                  </div>
+                );
+              }):null}
             />
           </div>
         )}
