@@ -12,6 +12,9 @@
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500;700&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   <style>
     * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    html { overflow-x: hidden; width: 100%; }
+    body { overflow-x: hidden; width: 100%; position: relative; -webkit-overflow-scrolling: touch; }
+    input, select, textarea { font-size: 16px !important; } /* iOSズーム防止 */
     body { margin: 0; padding: 0; background: #f7f7f8; font-family: 'Noto Sans JP', 'Hiragino Sans', sans-serif; font-weight: 300; overflow-x: hidden; width: 100%; }
     #root { max-width: 430px; width: 100%; margin: 0 auto; min-height: 100vh; overflow-x: hidden; }
     select, input, button, textarea { font-family: inherit; }
@@ -83,11 +86,25 @@ async function createBin(data) {
 }
 
 // ── ローカルストレージ ────────────────────────────
+const DEFAULT_VENDOR_MEMBERS = {
+  "なんていい日だなぁ": ["中澤","松岡","畑澤","丹羽","トルシン","松浦"],
+  "一柳重機": ["榊原","近藤"],
+  "kmax": []
+};
+
 function loadLocal() {
   try {
     const r = localStorage.getItem(STORAGE_KEY);
-    return r ? JSON.parse(r) : { requests:[], assignments:{}, vendorMembers:{}, vendorSchedules:{}, unitPrices:{}, orders:[] };
-  } catch { return { requests:[], assignments:{}, vendorMembers:{}, vendorSchedules:{}, unitPrices:{}, orders:[] }; }
+    if(r) {
+      const parsed = JSON.parse(r);
+      // vendorMembersが空なら初期値を設定
+      if(!parsed.vendorMembers || Object.keys(parsed.vendorMembers).length === 0) {
+        parsed.vendorMembers = DEFAULT_VENDOR_MEMBERS;
+      }
+      return parsed;
+    }
+    return { requests:[], assignments:{}, vendorMembers:DEFAULT_VENDOR_MEMBERS, vendorSchedules:{}, unitPrices:{}, orders:[] };
+  } catch { return { requests:[], assignments:{}, vendorMembers:DEFAULT_VENDOR_MEMBERS, vendorSchedules:{}, unitPrices:{}, orders:[] }; }
 }
 function saveLocal(d) { localStorage.setItem(STORAGE_KEY, JSON.stringify(d)); }
 function loadVendors() {
@@ -264,7 +281,7 @@ function MemberAssignCard({ r, a, vendorId, vendors, vendorMembers, onDelete, on
   };
 
   return (
-    <div style={{...S.reqCard, borderLeftColor:vendorColor(vendorId,vendors)}}>
+    <div style={{...S.reqCard, borderLeftColor:vendorColor(vendorId,vendors), maxWidth:"100%", boxSizing:"border-box", overflow:"hidden"}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
         <div style={{flex:1}}>
           <div style={{fontSize:12,color:"#8e8e93",marginBottom:2}}>📋 管理者より</div>
@@ -304,18 +321,19 @@ function MemberAssignCard({ r, a, vendorId, vendors, vendorMembers, onDelete, on
           {vendorMembers.length===0&&(
             <div style={{fontSize:12,color:"#aeaeb2",marginBottom:8}}>メンバータブから登録してください。</div>
           )}
-          <div style={{display:"flex",flexWrap:"wrap",gap:8,marginBottom:10}}>
+          <div style={{display:"flex",flexWrap:"wrap",gap:8,marginBottom:10,width:"100%"}}>
             {vendorMembers.map(m=>{
               const isSel = selected.includes(m);
               return (
                 <div key={m}
                   onClick={()=>toggleMember(m)}
-                  style={{fontSize:13,padding:"8px 14px",borderRadius:8,
+                  style={{fontSize:12,padding:"6px 10px",borderRadius:7,
                     border:`2px solid ${isSel?"#007aff":"#e5e5ea"}`,
                     background:isSel?"#007aff":"#fff",
                     color:isSel?"#fff":"#1c1c1e",
                     cursor:"pointer",userSelect:"none",
-                    fontWeight:isSel?700:400}}>
+                    fontWeight:isSel?600:400,
+                    boxSizing:"border-box"}}>
                   {isSel?"✓ ":""}{m}
                 </div>
               );
@@ -686,7 +704,16 @@ function App() {
 
   const pullFromCloud = async (id) => {
     if(!id) return; setSyncing(true); setSyncOk(false);
-    try { const r=await fetchBin(id); if(r&&r.requests){setData(r);saveLocal(r);setSyncOk(true);} }
+    try {
+      const r=await fetchBin(id);
+      if(r&&r.requests){
+        // vendorMembersが空なら初期値で補完
+        if(!r.vendorMembers||Object.keys(r.vendorMembers).length===0){
+          r.vendorMembers=DEFAULT_VENDOR_MEMBERS;
+        }
+        setData(r); saveLocal(r); setSyncOk(true);
+      }
+    }
     catch { showToast("取得失敗","err"); } finally { setSyncing(false); }
   };
   const pushToCloud = async (nd,id) => {
@@ -708,7 +735,8 @@ function App() {
   const handleUpdateRequest = async (formData) => {
     // 担当者モードかつ既に割当済みの場合は変更リクエストを送る
     const isAssigned = !!data.assignments[editingRequest.id];
-    if(role==="担当者" && isAssigned) {
+    const countChanged = Number(formData.count) !== Number(editingRequest.count);
+    if(role==="担当者" && isAssigned && countChanged) {
       const cr = {
         id: Date.now().toString(),
         reqId: editingRequest.id,
@@ -1133,11 +1161,9 @@ function App() {
         {/* ── カレンダー（担当者・管理者・業者） ── */}
         {view==="calendar"&&role!=="業務"&&(
           <div>
-            {role!=="業者"&&(
-              <button style={S.refreshBtn} onClick={()=>pullFromCloud(binId)} disabled={syncing}>
-                {syncing?"取得中…":"↻ 最新データを取得"}
-              </button>
-            )}
+            <button style={S.refreshBtn} onClick={()=>pullFromCloud(binId)} disabled={syncing}>
+              {syncing?"取得中…":"↻ 最新データを取得"}
+            </button>
             <CalendarView
               currentYM={currentYM} setCurrentYM={setCurrentYM}
               requestsByDate={requestsByDate} assignments={data.assignments}
@@ -1174,11 +1200,23 @@ function App() {
                     const cat=inferPriceCategory(r.koutei,vid);
                     const price=priceMap[cat]||0;
                     const total=cnt*price;
-                    return price>0?(
-                      <div key={vid} style={{fontSize:11,color:"#2d9e6b",marginTop:3,fontWeight:600}}>
-                        💴 {vid}：{cnt}人×¥{price.toLocaleString()}＝¥{total.toLocaleString()}
+                    return (
+                      <div key={vid} style={{marginTop:6}}>
+                        {price>0&&<div style={{fontSize:11,color:"#2d9e6b",marginBottom:4,fontWeight:500}}>
+                          {vid}：{cnt}人×¥{price.toLocaleString()}＝¥{total.toLocaleString()}
+                        </div>}
+                        <MemberAssignCard
+                          r={r} a={data.assignments[r.id]} vendorId={vid} vendors={vendors}
+                          vendorMembers={data.vendorMembers[vid]||[]}
+                          initialSelected={(data.memberAssignments[r.id]||{})[vid]||[]}
+                          onDelete={()=>deleteRequest(r.id)}
+                          onSave={(reqId,members)=>{
+                            const ma=data.memberAssignments||{};
+                            updateData({...data, memberAssignments:{...ma,[reqId]:{...(ma[reqId]||{}),[vid]:members}}});
+                            showToast("メンバーを割り当てました");
+                          }}/>
                       </div>
-                    ):null;
+                    );
                   })}
                   <button style={r.disclosed?S.discloseBtnOn:S.discloseBtnOff} onClick={()=>toggleDisclose(r.id)}>
                     {r.disclosed?"開示済 ✓":"開示する"}
@@ -1617,7 +1655,7 @@ const S = {
   calNum:{ width:22,height:22,borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,marginBottom:1 },
   calCount:{ fontSize:8,color:"#888",fontWeight:300,background:"#f5f5f5",borderRadius:3,padding:"1px 2px" },
   calDot:{ width:4,height:4,borderRadius:"50%" },
-  detailCard:{ background:"#fff",borderRadius:12,padding:"12px",marginTop:10,boxShadow:"0 1px 4px rgba(0,0,0,0.06)" },
+  detailCard:{ background:"#fff",borderRadius:12,padding:"12px",marginTop:10,boxShadow:"0 1px 4px rgba(0,0,0,0.06)",overflow:"hidden",boxSizing:"border-box" },
   detailTitle:{ fontSize:13,fontWeight:300,color:"#1a1a1a",letterSpacing:"0.1em" },
   addDayBtn:{ fontSize:10,padding:"4px 10px",background:"#1a1a1a",color:"#fff",border:"none",borderRadius:4,cursor:"pointer",fontWeight:300,letterSpacing:"0.06em" },
   legend:{ display:"flex",flexWrap:"wrap",gap:8,padding:"6px 2px",marginTop:4 },
@@ -1652,7 +1690,7 @@ const S = {
   discloseBtnOn:{ fontSize:11,padding:"4px 10px",background:"#e8faf0",color:"#1d8348",border:"1px solid #a3e4b8",borderRadius:6,cursor:"pointer",marginTop:5,fontFamily:"inherit" },
   sectionLabel:{ fontSize:9,fontWeight:300,color:"#aaaaaa",marginBottom:7,paddingLeft:2,letterSpacing:"0.15em",textTransform:"uppercase" },
   empty:{ textAlign:"center",color:"#aeaeb2",fontSize:13,padding:"20px 0" },
-  splitPanel:{ background:"#f9f9f9",borderRadius:9,padding:"10px",marginTop:7,border:"1px solid #e5e5ea" },
+  splitPanel:{ background:"#f9f9f9",borderRadius:9,padding:"10px",marginTop:7,border:"1px solid #e5e5ea",boxSizing:"border-box",width:"100%" },
   splitHint:{ fontSize:11,color:"#8e8e93",marginBottom:7 },
   splitRow:{ display:"flex",alignItems:"center",gap:7,marginBottom:6 },
   splitUnit:{ fontSize:11,color:"#aeaeb2" },
