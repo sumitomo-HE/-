@@ -780,6 +780,7 @@ function App() {
     setShowRegisterFor(null); setView("calendar"); showToast("登録しました");
   };
   const deleteRequest = async (id) => {
+    if(!window.confirm("この予定を削除してもよろしいですか？")) return;
     await updateData({
       ...data,
       requests: data.requests.filter(r=>r.id!==id),
