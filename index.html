@@ -275,11 +275,14 @@ function VendorPassSetting({ vendorName, currentPass, onSave }) {
 // ── 業者金額入力コンポーネント ──────────────────────
 function VendorAmountInput({ r, vendorId, onSaveAmount }) {
   const [editing, setEditing] = useState(false);
-  const [amount, setAmount] = useState(r.vendorAmounts?.[vendorId]||"");
+  const vendorAmounts = r.vendorAmounts || {};
+  const vendorAmt = vendorAmounts[vendorId] || "";
+  const [amount, setAmount] = useState(vendorAmt);
 
-  useEffect(()=>{ setAmount(r.vendorAmounts?.[vendorId]||""); },[r.vendorAmounts, vendorId]);
-
-  if(!onSaveAmount) return null;
+  useEffect(()=>{
+    const va = (r.vendorAmounts||{})[vendorId]||"";
+    setAmount(va);
+  },[JSON.stringify(r.vendorAmounts), vendorId]);
   return (
     <div style={{marginTop:8,paddingTop:8,borderTop:"0.5px solid #f2f2f7"}}>
       {!editing ? (
