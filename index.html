@@ -1195,7 +1195,7 @@ function App() {
               renderSplitUI={role==="管理者"?((r)=><SplitUI r={r}/>):null}
               renderDiscloseBtn={role==="管理者"?((r)=>(
                 <div>
-                  {r.disclosed&&Object.entries(data.assignments[r.id]||{}).map(([vid,cnt])=>{
+                  {Object.entries(data.assignments[r.id]||{}).map(([vid,cnt])=>{
                     const priceMap=(data.unitPrices||{})[vid]||{};
                     const cat=inferPriceCategory(r.koutei,vid);
                     const price=priceMap[cat]||0;
@@ -1382,6 +1382,14 @@ function App() {
                     vendorName={v}
                     currentPass={getVendorPass(vendorPasses,v)}
                     onSave={(np)=>changeVendorPass(v,np)}/>
+                  <div style={{marginTop:10,paddingTop:10,borderTop:"0.5px solid #f2f2f7"}}>
+                    <div style={{fontSize:10,color:"#aaaaaa",marginBottom:6,letterSpacing:"0.1em"}}>MEMBERS</div>
+                    <MemberManager
+                      vendorId={v}
+                      members={data.vendorMembers[v]||[]}
+                      onAdd={name=>addVendorMember(v,name)}
+                      onDelete={name=>deleteVendorMember(v,name)}/>
+                  </div>
                   {items.map(r=>(
                     <div key={r.id+v} style={S.vendorRow}>
                       <div style={{fontSize:13}}>{r.date}（{dayOfWeek(r.date)}）　{r.name}　<b>{r.ac}人</b></div>
