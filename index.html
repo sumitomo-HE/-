@@ -1,0 +1,704 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
+  <title>荷揚げ管理</title>
+  <meta name="apple-mobile-web-app-capable" content="yes"/>
+  <meta name="apple-mobile-web-app-status-bar-style" content="default"/>
+  <meta name="apple-mobile-web-app-title" content="荷揚げ管理"/>
+  <style>
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    body { margin: 0; padding: 0; background: #f2f2f7; font-family: -apple-system, 'Hiragino Sans', sans-serif; }
+    #root { max-width: 430px; margin: 0 auto; }
+  </style>
+</head>
+<body>
+<div id="root"></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
+<script type="text/babel">
+const { useState, useEffect, useRef } = React;
+
+const DEFAULT_VENDORS = ["なんていい日だなぁ", "一柳重機", "kmax"];
+const PALETTE_COLORS = ["#3b6fd4","#2d9e6b","#d44f3b","#8e44ad","#e67e22","#16a085","#c0392b","#2980b9"];
+const PALETTE_BGS    = ["#eef3fc","#edf7f2","#fceeed","#f5eef8","#fdf2e9","#e8f8f5","#fdedec","#ebf5fb"];
+const KOUTEI_OPTIONS = ["", "コラム建て", "建て方１日目", "建て方２日目", "建て方３日目", "建て方１日目（手起こし）", "建て方２日目（手起こし）", "建て方３日目（手起こし）", "その他"];
+const STORAGE_KEY = "荷揚げ管理v5";
+const BIN_STORAGE_KEY = "荷揚げ_binid";
+const VENDORS_STORAGE_KEY = "荷揚げ_vendors";
+const NAMES_STORAGE_KEY = "荷揚げ_names";
+const MANAGER_PASS = "0228";
+const API_KEY = "$2a$10$hReg5x0XFfuickDEhWh2VulvIHlKjtgqDYmlR65v17SFJ9qGTw.PG";
+const JSONBIN_BASE = "https://api.jsonbin.io/v3";
+
+async function fetchBin(binId) {
+  const res = await fetch(`${JSONBIN_BASE}/b/${binId}/latest`, { headers: { "X-Master-Key": API_KEY } });
+  if (!res.ok) throw new Error("fetch failed");
+  return (await res.json()).record;
+}
+async function updateBin(binId, data) {
+  const res = await fetch(`${JSONBIN_BASE}/b/${binId}`, {
+    method: "PUT", headers: { "Content-Type": "application/json", "X-Master-Key": API_KEY },
+    body: JSON.stringify(data)
+  });
+  if (!res.ok) throw new Error("update failed");
+}
+async function createBin(data) {
+  const res = await fetch(`${JSONBIN_BASE}/b`, {
+    method: "POST", headers: { "Content-Type": "application/json", "X-Master-Key": API_KEY, "X-Bin-Name": "荷揚げ管理" },
+    body: JSON.stringify(data)
+  });
+  if (!res.ok) throw new Error("create failed");
+  return (await res.json()).metadata.id;
+}
+
+function loadLocal() {
+  try { const r = localStorage.getItem(STORAGE_KEY); return r ? JSON.parse(r) : { requests: [], assignments: {} }; }
+  catch { return { requests: [], assignments: {} }; }
+}
+function saveLocal(d) { localStorage.setItem(STORAGE_KEY, JSON.stringify(d)); }
+function loadVendors() {
+  try { const r = localStorage.getItem(VENDORS_STORAGE_KEY); return r ? JSON.parse(r) : DEFAULT_VENDORS; }
+  catch { return DEFAULT_VENDORS; }
+}
+function saveVendors(v) { localStorage.setItem(VENDORS_STORAGE_KEY, JSON.stringify(v)); }
+function loadNames() {
+  try { const r = localStorage.getItem(NAMES_STORAGE_KEY); return r ? JSON.parse(r) : []; }
+  catch { return []; }
+}
+function saveNames(n) { localStorage.setItem(NAMES_STORAGE_KEY, JSON.stringify(n)); }
+
+function today() { return new Date().toISOString().slice(0, 10); }
+function daysInMonth(ym) { const [y,m]=ym.split("-").map(Number); return new Date(y,m,0).getDate(); }
+function dayOfWeek(s) { return ["日","月","火","水","木","金","土"][new Date(s).getDay()]; }
+function weekdayIdx(s) { return new Date(s).getDay(); }
+function isPast(ds) { return ds < today(); }
+function vendorColor(v, vendors) { const i=vendors.indexOf(v); return i>=0?PALETTE_COLORS[i%PALETTE_COLORS.length]:"#8e8e93"; }
+function vendorBg(v, vendors) { const i=vendors.indexOf(v); return i>=0?PALETTE_BGS[i%PALETTE_BGS.length]:"#f2f2f7"; }
+
+function PinPad({ onSuccess }) {
+  const [pins, setPins] = useState(["","","",""]);
+  const [shake, setShake] = useState(false);
+  const handleDigit = (digit) => {
+    const idx = pins.findIndex(p=>p==="");
+    if(idx===-1) return;
+    const next=[...pins]; next[idx]=digit; setPins(next);
+    if(idx===3) {
+      const code=[...next].join("");
+      setTimeout(()=>{
+        if(code===MANAGER_PASS) { onSuccess(); }
+        else { setShake(true); setTimeout(()=>{ setPins(["","","",""]); setShake(false); },600); }
+      },150);
+    }
+  };
+  const handleDelete = () => {
+    const last=[...pins].map((p,i)=>p!==""?i:-1).filter(i=>i!==-1).pop();
+    if(last===undefined) return;
+    const next=[...pins]; next[last]=""; setPins(next);
+  };
+  return (
+    <div style={PS.overlay}>
+      <div style={PS.sheet}>
+        <div style={PS.lockIcon}>🔒</div>
+        <div style={PS.title}>管理者ログイン</div>
+        <div style={PS.subtitle}>4桁のパスワードを入力</div>
+        <div style={{...PS.dots, animation:shake?"shake 0.4s ease":"none"}}>
+          {pins.map((p,i)=>(
+            <div key={i} style={{...PS.dot, background:p!==""?"#1c1c1e":"transparent", border:`2px solid ${p!==""?"#1c1c1e":"#c7c7cc"}`}}/>
+          ))}
+        </div>
+        <div style={PS.keypad}>
+          {["1","2","3","4","5","6","7","8","9","","0","⌫"].map((k,i)=>(
+            <button key={i} style={{...PS.key,...(k===""?PS.keyEmpty:{})}}
+              onClick={()=>{ if(k==="⌫") handleDelete(); else if(k!=="") handleDigit(k); }}>
+              {k}
+            </button>
+          ))}
+        </div>
+      </div>
+      <style>{`@keyframes shake{0%,100%{transform:translateX(0)}20%,60%{transform:translateX(-8px)}40%,80%{transform:translateX(8px)}}`}</style>
+    </div>
+  );
+}
+
+function RegisterForm({ initialDate, vendors, names, onSave, onCancel, syncing }) {
+  const [form, setForm] = useState({ name:names[0]||"", bukken:"", date:initialDate||today(), koutei:"", count:1, tsubo:"", floors:"", note:"" });
+  const [nameInput, setNameInput] = useState(names[0]||"");
+  const [showNameDrop, setShowNameDrop] = useState(false);
+  const handleNameSelect = (n) => { setNameInput(n); setForm(f=>({...f,name:n})); setShowNameDrop(false); };
+  const handleSave = () => {
+    if(!form.name||!form.date||!form.count) return;
+    const newNames=[form.name,...names.filter(n=>n!==form.name)].slice(0,20);
+    saveNames(newNames);
+    onSave({...form, count:Number(form.count)});
+  };
+  return (
+    <div style={M.formCard}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+        <div style={M.formTitle}>予定を登録</div>
+        {onCancel&&<button style={M.closeBtn} onClick={onCancel}>✕</button>}
+      </div>
+      <div style={M.formRow}>
+        <label style={M.formLabel}>担当者名 <span style={{color:"#ff3b30"}}>*</span></label>
+        <div style={{position:"relative"}}>
+          <input style={M.formInput} value={nameInput}
+            onChange={e=>{ setNameInput(e.target.value); setForm(f=>({...f,name:e.target.value})); }}
+            onFocus={()=>setShowNameDrop(true)}
+            placeholder="名前を入力または選択"/>
+          {showNameDrop&&names.length>0&&(
+            <div style={M.nameDrop}>
+              {names.map(n=>(<div key={n} style={M.nameDropItem} onClick={()=>handleNameSelect(n)}>{n}</div>))}
+              <div style={M.nameDropClose} onClick={()=>setShowNameDrop(false)}>閉じる</div>
+            </div>
+          )}
+        </div>
+      </div>
+      <div style={M.formRow}>
+        <label style={M.formLabel}>物件名</label>
+        <input style={M.formInput} value={form.bukken} onChange={e=>setForm(f=>({...f,bukken:e.target.value}))}
+          placeholder="フルネームで入力してください（ひらがなでも可）"/>
+        <div style={M.formHint}>※ 物件名はフルネームで入力してください（ひらがなでも可）</div>
+      </div>
+      <div style={M.formRow}>
+        <label style={M.formLabel}>工程</label>
+        <select style={M.formInput} value={form.koutei} onChange={e=>setForm(f=>({...f,koutei:e.target.value}))}>
+          {KOUTEI_OPTIONS.map(o=><option key={o} value={o}>{o||"─ 選択してください ─"}</option>)}
+        </select>
+      </div>
+      <div style={M.formRow}>
+        <label style={M.formLabel}>日付 <span style={{color:"#ff3b30"}}>*</span></label>
+        <input style={M.formInput} type="date" value={form.date} onChange={e=>setForm(f=>({...f,date:e.target.value}))}/>
+      </div>
+      <div style={M.formRow}>
+        <label style={M.formLabel}>人数 <span style={{color:"#ff3b30"}}>*</span></label>
+        <input style={M.formInput} type="number" min={1} max={30} value={form.count} onChange={e=>setForm(f=>({...f,count:e.target.value}))}/>
+      </div>
+      <div style={M.formRow}>
+        <label style={M.formLabel}>おおよその坪数</label>
+        <select style={M.formInput} value={form.tsubo} onChange={e=>setForm(f=>({...f,tsubo:e.target.value}))}>
+          <option value="">─ 選択してください ─</option>
+          <option value="30坪未満">30坪未満</option>
+          {[30,35,40,45,50,55,60,65,70,75,80,85,90,95,100].map(n=>(
+            <option key={n} value={`${n}坪`}>{n}坪</option>
+          ))}
+          <option value="100坪以上">100坪以上</option>
+        </select>
+      </div>
+      <div style={M.formRow}>
+        <label style={M.formLabel}>階数</label>
+        <input style={M.formInput} type="number" value={form.floors} onChange={e=>setForm(f=>({...f,floors:e.target.value}))} placeholder="例：2"/>
+      </div>
+      <div style={M.formRow}>
+        <label style={M.formLabel}>備考</label>
+        <input style={M.formInput} value={form.note} onChange={e=>setForm(f=>({...f,note:e.target.value}))} placeholder="メモ"/>
+      </div>
+      <button style={{...M.btnPrimary,width:"100%",marginTop:16,padding:"14px",fontSize:16,opacity:syncing?0.6:1}}
+        onClick={handleSave} disabled={syncing}>
+        {syncing?"保存中…":"登録する"}
+      </button>
+    </div>
+  );
+}
+
+function App() {
+  const [data, setData] = useState(loadLocal);
+  const [vendors, setVendors] = useState(loadVendors);
+  const [names, setNames] = useState(loadNames);
+  const [role, setRole] = useState(null);
+  const [showPin, setShowPin] = useState(false);
+  const [view, setView] = useState("calendar");
+  const [currentYM, setCurrentYM] = useState(today().slice(0,7));
+  const [selectedDate, setSelectedDate] = useState(null);
+  const [showRegisterFor, setShowRegisterFor] = useState(null);
+  const [splitInputs, setSplitInputs] = useState({});
+  const [toast, setToast] = useState("");
+  const [toastType, setToastType] = useState("ok");
+  const [syncing, setSyncing] = useState(false);
+  const [syncOk, setSyncOk] = useState(false);
+  const [binId, setBinId] = useState(()=>localStorage.getItem(BIN_STORAGE_KEY)||"");
+  const [vendorEditMode, setVendorEditMode] = useState(false);
+  const [newVendorName, setNewVendorName] = useState("");
+  const syncTimer = useRef(null);
+
+  useEffect(()=>{ saveLocal(data); },[data]);
+  useEffect(()=>{ saveVendors(vendors); },[vendors]);
+  useEffect(()=>{ if(toast){const t=setTimeout(()=>setToast(""),2500);return()=>clearTimeout(t);} },[toast]);
+  useEffect(()=>{ if(binId) pullFromCloud(binId); },[]);
+
+  const showToast=(m,type="ok")=>{ setToast(m); setToastType(type); };
+
+  const pullFromCloud = async (id) => {
+    if(!id) return;
+    setSyncing(true); setSyncOk(false);
+    try { const r=await fetchBin(id); if(r&&r.requests){setData(r);saveLocal(r);setSyncOk(true);} }
+    catch(e) { showToast("取得に失敗しました","err"); }
+    finally { setSyncing(false); }
+  };
+  const pushToCloud = async (newData, id) => {
+    const tid=id||binId; if(!tid) return;
+    setSyncing(true);
+    try { await updateBin(tid,newData); setSyncOk(true); }
+    catch(e) { showToast("保存に失敗しました","err"); }
+    finally { setSyncing(false); }
+  };
+  const setupCloud = async () => {
+    setSyncing(true);
+    try { const id=await createBin(data); setBinId(id); localStorage.setItem(BIN_STORAGE_KEY,id); setSyncOk(true); showToast("クラウド連携を設定しました"); }
+    catch(e) { showToast("設定に失敗しました","err"); }
+    finally { setSyncing(false); }
+  };
+  const updateData = async (newData) => {
+    setData(newData); saveLocal(newData);
+    if(binId){ clearTimeout(syncTimer.current); syncTimer.current=setTimeout(()=>pushToCloud(newData,binId),800); }
+  };
+
+  const handleRegister = async (formData) => {
+    const req={ id:Date.now().toString(), ...formData, createdAt:new Date().toISOString(), disclosed:false };
+    await updateData({...data, requests:[...data.requests, req]});
+    const newNames=[formData.name,...names.filter(n=>n!==formData.name)].slice(0,20);
+    setNames(newNames); saveNames(newNames);
+    setShowRegisterFor(null);
+    setView("calendar");
+    showToast("登録しました");
+  };
+  const deleteRequest = async (id) => {
+    await updateData({ requests:data.requests.filter(r=>r.id!==id), assignments:Object.fromEntries(Object.entries(data.assignments).filter(([k])=>k!==id)) });
+    showToast("削除しました");
+  };
+  const confirmSplit = async (reqId, total) => {
+    const inputs=splitInputs[reqId]||{}; const vals={}; let sum=0;
+    vendors.forEach(v=>{ const n=Number(inputs[v]||0); if(n>0){vals[v]=n;sum+=n;} });
+    if(!sum){ showToast("人数を入力してください","err"); return; }
+    if(sum>total){ showToast(`合計${sum}人が予定${total}人を超えています`,"err"); return; }
+    await updateData({...data, assignments:{...data.assignments,[reqId]:vals}});
+    setSplitInputs(prev=>({...prev,[reqId]:undefined}));
+    showToast("割当を保存しました");
+  };
+  const clearAssignment = async (reqId) => {
+    const a={...data.assignments}; delete a[reqId];
+    await updateData({...data, assignments:a});
+  };
+  const toggleDisclose = async (id) => {
+    await updateData({...data, requests:data.requests.map(r=>r.id===id?{...r,disclosed:!r.disclosed}:r)});
+  };
+  const addVendor = () => {
+    if(!newVendorName.trim()) return;
+    if(vendors.includes(newVendorName.trim())){ showToast("すでに存在します","err"); return; }
+    setVendors([...vendors, newVendorName.trim()]); setNewVendorName(""); showToast("業者を追加しました");
+  };
+  const deleteVendor = (v) => { setVendors(vendors.filter(vv=>vv!==v)); showToast("削除しました"); };
+  const moveVendor = (idx, dir) => {
+    const arr=[...vendors]; const to=idx+dir;
+    if(to<0||to>=arr.length) return;
+    [arr[idx],arr[to]]=[arr[to],arr[idx]]; setVendors(arr);
+  };
+
+  const days=daysInMonth(currentYM);
+  const firstDay=new Date(currentYM+"-01").getDay();
+  const byDate={};
+  data.requests.forEach(r=>{ if(!byDate[r.date])byDate[r.date]=[]; byDate[r.date].push(r); });
+  const prevM=()=>{ const d=new Date(currentYM+"-01"); d.setMonth(d.getMonth()-1); setCurrentYM(d.toISOString().slice(0,7)); };
+  const nextM=()=>{ const d=new Date(currentYM+"-01"); d.setMonth(d.getMonth()+2); d.setDate(0); setCurrentYM(d.toISOString().slice(0,7)); };
+  const unassigned=data.requests.filter(r=>!data.assignments[r.id]);
+  const assigned=data.requests.filter(r=>data.assignments[r.id]);
+  const dateReqs=selectedDate?(byDate[selectedDate]||[]):[];
+
+  const VendorBadges=({reqId})=>{
+    const asgn=data.assignments[reqId];
+    if(!asgn) return <span style={M.pill}>未割当</span>;
+    return <span style={{display:"flex",flexWrap:"wrap",gap:4}}>{Object.entries(asgn).map(([v,c])=>(
+      <span key={v} style={{...M.pill,background:vendorBg(v,vendors),color:vendorColor(v,vendors),fontWeight:600}}>{v} {c}人</span>
+    ))}</span>;
+  };
+
+  const SplitUI=({r})=>{
+    const asgn=data.assignments[r.id]||{};
+    const inputs=splitInputs[r.id]||{};
+    const editing=splitInputs[r.id]!==undefined;
+    const start=()=>setSplitInputs(p=>({...p,[r.id]:Object.fromEntries(vendors.map(v=>[v,asgn[v]?String(asgn[v]):""]))}) );
+    return editing?(
+      <div style={M.splitPanel}>
+        <div style={M.splitHint}>予定 <b>{r.count}人</b> ／ 業者ごとの人数を入力</div>
+        {vendors.map(v=>(
+          <div key={v} style={M.splitRow}>
+            <span style={{...M.pill,background:vendorBg(v,vendors),color:vendorColor(v,vendors),minWidth:108,textAlign:"center",fontWeight:600}}>{v}</span>
+            <input type="number" min={0} max={r.count} value={inputs[v]||""} placeholder="0"
+              onChange={e=>setSplitInputs(p=>({...p,[r.id]:{...p[r.id],[v]:e.target.value}}))}
+              style={M.numInput}/>
+            <span style={M.splitUnit}>人</span>
+          </div>
+        ))}
+        <div style={{display:"flex",gap:8,marginTop:10}}>
+          <button style={M.btnPrimary} onClick={()=>confirmSplit(r.id,r.count)}>確定</button>
+          <button style={M.btnGhost} onClick={()=>setSplitInputs(p=>({...p,[r.id]:undefined}))}>キャンセル</button>
+        </div>
+      </div>
+    ):(
+      <button style={M.btnAssign} onClick={start}>
+        {Object.keys(asgn).length>0?"✏️ 割当を変更":"＋ 業者を割り当てる"}
+      </button>
+    );
+  };
+
+  if(showPin) return <PinPad onSuccess={()=>{ setShowPin(false); setRole("管理者"); setView("calendar"); }}/>;
+
+  if(!role) return (
+    <div style={M.root}>
+      <div style={M.splash}>
+        <div style={M.splashIcon}>🏗</div>
+        <div style={M.splashTitle}>荷揚げ管理</div>
+        <div style={M.splashSub}>住友林業ホームエンジニアリング 神奈川</div>
+        <div style={M.cloudChip}>
+          {binId ? <><span style={{color:"#34c759"}}>●</span> クラウド連携済み</> : <><span style={{color:"#ff9500"}}>●</span> クラウド未設定</>}
+          {!binId&&<button style={M.chipBtn} onClick={setupCloud}>{syncing?"設定中…":"初期設定"}</button>}
+          {binId&&<button style={M.chipBtn} onClick={()=>pullFromCloud(binId)}>{syncing?"取得中…":"更新"}</button>}
+        </div>
+        <div style={M.roleSection}>
+          <button style={M.roleCard} onClick={()=>setRole("担当者")}>
+            <span style={M.roleIcon}>👷</span>
+            <div><div style={M.roleLabel}>担当者</div><div style={M.roleDesc}>予定を入力する</div></div>
+            <span style={M.roleChev}>›</span>
+          </button>
+          <button style={{...M.roleCard,...M.roleCardManager}} onClick={()=>setShowPin(true)}>
+            <span style={M.roleIcon}>⚙️</span>
+            <div><div style={M.roleLabel}>管理者</div><div style={M.roleDesc}>業者調整・開示（要パスワード）</div></div>
+            <span style={M.roleChev}>›</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+
+  const navItems = role==="担当者"
+    ? [{key:"calendar",label:"カレンダー",icon:"📅"},{key:"input",label:"予定登録",icon:"＋"}]
+    : [{key:"calendar",label:"カレンダー",icon:"📅"},{key:"adjust",label:"業者調整",icon:"⚙️"},{key:"vendors",label:"業者一覧",icon:"🏢"}];
+
+  if(showRegisterFor!==null) return (
+    <div style={M.root}>
+      <div style={M.header}>
+        <div><div style={M.headerTitle}>荷揚げ管理</div><div style={M.headerSub}>担当者モード</div></div>
+      </div>
+      <main style={M.main}>
+        <RegisterForm initialDate={showRegisterFor||today()} vendors={vendors} names={names}
+          onSave={handleRegister} onCancel={()=>setShowRegisterFor(null)} syncing={syncing}/>
+      </main>
+    </div>
+  );
+
+  return (
+    <div style={M.root}>
+      <div style={M.header}>
+        <div>
+          <div style={M.headerTitle}>荷揚げ管理</div>
+          <div style={M.headerSub}>{role==="管理者"?"管理者モード":"担当者モード"}</div>
+        </div>
+        <div style={{display:"flex",alignItems:"center",gap:8}}>
+          {syncing?<span style={{fontSize:14,color:"#007aff"}}>↻</span>:syncOk?<span style={{fontSize:12,color:"#34c759"}}>●</span>:null}
+          <button style={M.headerBtn} onClick={()=>{setRole(null);setView("calendar");}}>切替</button>
+        </div>
+      </div>
+      <div style={M.tabBar}>
+        {navItems.map(n=>(
+          <button key={n.key} style={{...M.tab,...(view===n.key?M.tabActive:{})}}
+            onClick={()=>{setView(n.key);setSelectedDate(null);}}>
+            <span style={{fontSize:16}}>{n.icon}</span>
+            <span>{n.label}</span>
+          </button>
+        ))}
+      </div>
+      <main style={M.main}>
+        {view==="calendar"&&(
+          <div>
+            <div style={M.calNav}>
+              <button style={M.calNavBtn} onClick={prevM}>‹</button>
+              <span style={M.calNavTitle}>{currentYM.replace("-","年")}月</span>
+              <button style={M.calNavBtn} onClick={nextM}>›</button>
+            </div>
+            <button style={M.refreshBtn} onClick={()=>pullFromCloud(binId)} disabled={syncing}>
+              {syncing?"取得中…":"↻ 最新データを取得"}
+            </button>
+            <div style={M.calGrid}>
+              {["日","月","火","水","木","金","土"].map(d=>(
+                <div key={d} style={{...M.calDow,color:d==="日"?"#ff3b30":d==="土"?"#007aff":"#8e8e93"}}>{d}</div>
+              ))}
+              {Array.from({length:firstDay}).map((_,i)=><div key={"e"+i}/>)}
+              {Array.from({length:days}).map((_,i)=>{
+                const ds=`${currentYM}-${String(i+1).padStart(2,"0")}`;
+                const reqs=byDate[ds]||[];
+                const total=reqs.reduce((s,r)=>s+r.count,0);
+                const isT=ds===today(); const isSel=ds===selectedDate;
+                const past=isPast(ds); const wi=weekdayIdx(ds);
+                return (
+                  <button key={ds}
+                    style={{...M.calCell,...(isT?M.calCellToday:{}),...(isSel?M.calCellSel:{}),...(past&&!isT?M.calCellPast:{})}}
+                    onClick={()=>{
+                      if(past) return;
+                      if(isSel){ setSelectedDate(null); return; }
+                      setSelectedDate(ds);
+                      if(reqs.length===0&&role==="担当者") setShowRegisterFor(ds);
+                    }}>
+                    <span style={{...M.calNum,background:isT?"#007aff":"transparent",
+                      color:past&&!isT?"#c7c7cc":isT?"#fff":wi===0?"#ff3b30":wi===6?"#007aff":"#1c1c1e"}}>
+                      {i+1}
+                    </span>
+                    {total>0&&<div style={{...M.calCount,opacity:past?0.4:1}}>{total}人</div>}
+                    <div style={{display:"flex",flexWrap:"wrap",gap:2,justifyContent:"center",marginTop:2}}>
+                      {reqs.map(r=>{ const a=data.assignments[r.id];
+                        if(!a) return <div key={r.id} style={{...M.calDot,background:past?"#e0e0e0":"#c7c7cc"}}/>;
+                        return Object.entries(a).map(([v])=><div key={r.id+v} style={{...M.calDot,background:past?"#c0c0c0":vendorColor(v,vendors)}}/>);
+                      })}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+            {selectedDate&&(
+              <div style={M.detailCard}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10,paddingBottom:8,borderBottom:"0.5px solid #f2f2f7"}}>
+                  <div style={M.detailTitle}>{selectedDate}（{dayOfWeek(selectedDate)}）</div>
+                  {role==="担当者"&&!isPast(selectedDate)&&(
+                    <button style={M.addDayBtn} onClick={()=>setShowRegisterFor(selectedDate)}>＋ 追加</button>
+                  )}
+                </div>
+                {dateReqs.length===0&&<div style={M.empty}>予定なし</div>}
+                {dateReqs.map(r=>{
+                  const a=data.assignments[r.id];
+                  const fc=a?vendorColor(Object.keys(a)[0],vendors):"#c7c7cc";
+                  return (
+                    <div key={r.id} style={{...M.reqCard,borderLeftColor:fc}}>
+                      <div style={M.reqName}>{r.name}</div>
+                      {r.bukken&&<div style={M.bukken}>🏠 {r.bukken}</div>}
+                      {r.koutei&&<div style={M.kouteiChip}>{r.koutei}</div>}
+                      <div style={M.reqMeta}>👷 {r.count}人{r.tsubo?`　${r.tsubo}`:""}{r.floors?`　${r.floors}階`:""}</div>
+                      {r.note&&<div style={M.reqNote}>{r.note}</div>}
+                      <div style={M.chipRow}><VendorBadges reqId={r.id}/>{r.disclosed&&<span style={M.disclosedChip}>開示済</span>}</div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+            <div style={M.legend}>
+              {vendors.map(v=>(<span key={v} style={M.legendItem}><span style={{...M.calDot,background:vendorColor(v,vendors),display:"inline-block"}}/>{v}</span>))}
+              <span style={M.legendItem}><span style={{...M.calDot,background:"#c7c7cc",display:"inline-block"}}/>未割当</span>
+            </div>
+          </div>
+        )}
+        {view==="input"&&(
+          <RegisterForm initialDate={today()} vendors={vendors} names={names} onSave={handleRegister} syncing={syncing}/>
+        )}
+        {view==="adjust"&&role==="管理者"&&(
+          <div>
+            <button style={M.refreshBtn} onClick={()=>pullFromCloud(binId)} disabled={syncing}>
+              {syncing?"取得中…":"↻ 最新データを取得"}
+            </button>
+            <div style={M.sectionLabel}>未割当 {unassigned.length}件</div>
+            {unassigned.length===0&&<div style={M.empty}>すべて割当済みです ✓</div>}
+            {unassigned.map(r=>(
+              <div key={r.id} style={{...M.reqCard,borderLeftColor:"#ff9500"}}>
+                <div style={{display:"flex",justifyContent:"space-between"}}>
+                  <div style={{flex:1}}>
+                    <div style={M.reqName}>{r.name}　<span style={M.reqDate}>{r.date}（{dayOfWeek(r.date)}）</span></div>
+                    {r.bukken&&<div style={M.bukken}>🏠 {r.bukken}</div>}
+                    {r.koutei&&<div style={M.kouteiChip}>{r.koutei}</div>}
+                    <div style={M.reqMeta}>👷 {r.count}人{r.tsubo?`　${r.tsubo}`:""}{r.floors?`　${r.floors}階`:""}</div>
+                    {r.note&&<div style={M.reqNote}>{r.note}</div>}
+                  </div>
+                  <button style={M.delBtn} onClick={()=>deleteRequest(r.id)}>✕</button>
+                </div>
+                <SplitUI r={r}/>
+              </div>
+            ))}
+            <div style={{...M.sectionLabel,marginTop:20}}>割当済 {assigned.length}件</div>
+            {assigned.length===0&&<div style={M.empty}>まだ割当がありません</div>}
+            {assigned.map(r=>{
+              const a=data.assignments[r.id]||{}; const fv=Object.keys(a)[0];
+              return (
+                <div key={r.id} style={{...M.reqCard,borderLeftColor:fv?vendorColor(fv,vendors):"#c7c7cc"}}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
+                    <div style={{flex:1}}>
+                      <div style={M.reqName}>{r.name}　<span style={M.reqDate}>{r.date}（{dayOfWeek(r.date)}）</span></div>
+                      {r.bukken&&<div style={M.bukken}>🏠 {r.bukken}</div>}
+                      {r.koutei&&<div style={M.kouteiChip}>{r.koutei}</div>}
+                      <div style={M.reqMeta}>👷 {r.count}人{r.tsubo?`　${r.tsubo}`:""}{r.floors?`　${r.floors}階`:""}</div>
+                      <div style={M.chipRow}>
+                        {Object.entries(a).map(([v,c])=>(
+                          <span key={v} style={{...M.pill,background:vendorBg(v,vendors),color:vendorColor(v,vendors),fontWeight:600}}>{v} {c}人</span>
+                        ))}
+                      </div>
+                      <button style={r.disclosed?M.discloseBtnOn:M.discloseBtnOff} onClick={()=>toggleDisclose(r.id)}>
+                        {r.disclosed?"開示済 ✓":"開示する"}
+                      </button>
+                    </div>
+                    <div style={{display:"flex",flexDirection:"column",gap:6,marginLeft:8}}>
+                      <button style={M.delBtn} onClick={()=>deleteRequest(r.id)}>✕</button>
+                      <button style={M.undoBtn} onClick={()=>clearAssignment(r.id)}>↩</button>
+                    </div>
+                  </div>
+                  <SplitUI r={r}/>
+                </div>
+              );
+            })}
+          </div>
+        )}
+        {view==="vendors"&&role==="管理者"&&(
+          <div>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+              <div style={M.sectionLabel}>荷揚げ業者一覧</div>
+              <button style={vendorEditMode?M.editModeOnBtn:M.editModeOffBtn} onClick={()=>setVendorEditMode(!vendorEditMode)}>
+                {vendorEditMode?"完了":"✏️ 編集"}
+              </button>
+            </div>
+            {vendorEditMode&&(
+              <div style={M.vendorEditPanel}>
+                <div style={{fontSize:13,color:"#8e8e93",marginBottom:10}}>業者の追加・削除・並び替えができます</div>
+                {vendors.map((v,idx)=>(
+                  <div key={v} style={M.vendorEditRow}>
+                    <div style={{display:"flex",gap:4}}>
+                      <button style={M.orderBtn} onClick={()=>moveVendor(idx,-1)} disabled={idx===0}>↑</button>
+                      <button style={M.orderBtn} onClick={()=>moveVendor(idx,1)} disabled={idx===vendors.length-1}>↓</button>
+                    </div>
+                    <span style={{...M.pill,background:vendorBg(v,vendors),color:vendorColor(v,vendors),fontWeight:600,flex:1}}>{v}</span>
+                    <button style={M.delBtn} onClick={()=>deleteVendor(v)}>✕</button>
+                  </div>
+                ))}
+                <div style={{display:"flex",gap:8,marginTop:12}}>
+                  <input style={{...M.formInput,flex:1}} value={newVendorName} onChange={e=>setNewVendorName(e.target.value)} placeholder="新しい業者名"/>
+                  <button style={M.btnPrimary} onClick={addVendor}>追加</button>
+                </div>
+              </div>
+            )}
+            {vendors.map(v=>{
+              const items=[];
+              data.requests.forEach(r=>{ const a=data.assignments[r.id]; if(a&&a[v]>0)items.push({...r,ac:a[v]}); });
+              items.sort((a,b)=>a.date.localeCompare(b.date));
+              const total=items.reduce((s,r)=>s+r.ac,0);
+              return (
+                <div key={v} style={{...M.vendorCard,borderTopColor:vendorColor(v,vendors)}}>
+                  <div style={{...M.vendorName,color:vendorColor(v,vendors)}}>{v}</div>
+                  <div style={M.vendorStat}>{items.length}件　計{total}人</div>
+                  {items.map(r=>(
+                    <div key={r.id+v} style={M.vendorRow}>
+                      <div style={{fontSize:13,color:"#1c1c1e"}}>{r.date}（{dayOfWeek(r.date)}）　{r.name}　<b>{r.ac}人</b></div>
+                      {r.bukken&&<div style={M.bukken}>🏠 {r.bukken}</div>}
+                      {r.koutei&&<span style={M.kouteiChip}>{r.koutei}</span>}
+                      {r.disclosed&&<span style={M.disclosedChip}>開示済</span>}
+                    </div>
+                  ))}
+                  {items.length===0&&<div style={{fontSize:13,color:"#c7c7cc",marginTop:4}}>割当なし</div>}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </main>
+      {toast&&<div style={{...M.toast,background:toastType==="err"?"#ff3b30":"#1c1c1e"}}>{toast}</div>}
+    </div>
+  );
+}
+
+const PS = {
+  overlay:{ position:"fixed",inset:0,background:"#f2f2f7",display:"flex",alignItems:"center",justifyContent:"center",zIndex:999 },
+  sheet:{ width:"100%",maxWidth:340,padding:"40px 24px 32px",textAlign:"center" },
+  lockIcon:{ fontSize:48,marginBottom:16 },
+  title:{ fontSize:22,fontWeight:700,color:"#1c1c1e",marginBottom:4 },
+  subtitle:{ fontSize:14,color:"#8e8e93",marginBottom:36 },
+  dots:{ display:"flex",gap:16,justifyContent:"center",marginBottom:40 },
+  dot:{ width:16,height:16,borderRadius:"50%",transition:"background 0.15s" },
+  keypad:{ display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:12,maxWidth:280,margin:"0 auto" },
+  key:{ background:"#fff",border:"none",borderRadius:50,width:"100%",aspectRatio:"1",fontSize:24,fontWeight:400,color:"#1c1c1e",cursor:"pointer",boxShadow:"0 1px 3px rgba(0,0,0,0.12)",fontFamily:"inherit" },
+  keyEmpty:{ background:"transparent",boxShadow:"none",cursor:"default" },
+};
+const M = {
+  root:{ fontFamily:"-apple-system,'Hiragino Sans',sans-serif",background:"#f2f2f7",minHeight:"100vh",maxWidth:430,margin:"0 auto" },
+  splash:{ padding:"60px 24px 32px",minHeight:"100vh",display:"flex",flexDirection:"column",alignItems:"center" },
+  splashIcon:{ fontSize:56,marginBottom:12 },
+  splashTitle:{ fontSize:28,fontWeight:700,color:"#1c1c1e",letterSpacing:"-0.5px",marginBottom:4 },
+  splashSub:{ fontSize:13,color:"#8e8e93",marginBottom:32,textAlign:"center" },
+  cloudChip:{ display:"flex",alignItems:"center",gap:8,background:"#fff",borderRadius:20,padding:"8px 16px",fontSize:13,color:"#3c3c43",marginBottom:32,boxShadow:"0 1px 3px rgba(0,0,0,0.08)" },
+  chipBtn:{ fontSize:12,padding:"4px 10px",background:"#007aff",color:"#fff",border:"none",borderRadius:12,cursor:"pointer",marginLeft:4 },
+  roleSection:{ width:"100%",display:"flex",flexDirection:"column",gap:12 },
+  roleCard:{ width:"100%",background:"#fff",border:"none",borderRadius:16,padding:"18px 20px",display:"flex",alignItems:"center",gap:16,cursor:"pointer",boxShadow:"0 1px 3px rgba(0,0,0,0.08)",textAlign:"left" },
+  roleCardManager:{ background:"#f0f7ff" },
+  roleIcon:{ fontSize:28,flexShrink:0 },
+  roleLabel:{ fontSize:16,fontWeight:600,color:"#1c1c1e" },
+  roleDesc:{ fontSize:12,color:"#8e8e93",marginTop:2 },
+  roleChev:{ fontSize:22,color:"#c7c7cc",marginLeft:"auto",flexShrink:0 },
+  header:{ background:"rgba(255,255,255,0.9)",backdropFilter:"blur(20px)",padding:"14px 20px 10px",display:"flex",justifyContent:"space-between",alignItems:"flex-end",borderBottom:"0.5px solid #d1d1d6",position:"sticky",top:0,zIndex:10 },
+  headerTitle:{ fontSize:20,fontWeight:700,color:"#1c1c1e",letterSpacing:"-0.3px" },
+  headerSub:{ fontSize:11,color:"#8e8e93",marginTop:1 },
+  headerBtn:{ fontSize:13,padding:"6px 14px",background:"#007aff",color:"#fff",border:"none",borderRadius:20,cursor:"pointer",fontWeight:500 },
+  tabBar:{ display:"flex",background:"#fff",borderBottom:"0.5px solid #d1d1d6" },
+  tab:{ flex:1,padding:"10px 4px 8px",border:"none",background:"none",color:"#8e8e93",cursor:"pointer",fontSize:11,display:"flex",flexDirection:"column",alignItems:"center",gap:2 },
+  tabActive:{ color:"#007aff",borderBottom:"2px solid #007aff" },
+  main:{ padding:"16px 12px 40px" },
+  calNav:{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12,padding:"0 4px" },
+  calNavTitle:{ fontSize:17,fontWeight:600,color:"#1c1c1e" },
+  calNavBtn:{ background:"none",border:"none",fontSize:24,color:"#007aff",cursor:"pointer",padding:"0 8px",lineHeight:1 },
+  refreshBtn:{ width:"100%",padding:"9px",background:"#fff",border:"0.5px solid #d1d1d6",borderRadius:10,fontSize:13,color:"#007aff",fontWeight:500,cursor:"pointer",marginBottom:12,fontFamily:"inherit" },
+  calGrid:{ display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:2,marginBottom:8 },
+  calDow:{ textAlign:"center",fontSize:11,fontWeight:600,paddingBottom:4 },
+  calCell:{ background:"#fff",borderRadius:8,padding:"4px 2px 5px",minHeight:56,display:"flex",flexDirection:"column",alignItems:"center",border:"none",cursor:"pointer",fontFamily:"inherit" },
+  calCellToday:{ background:"#f0f7ff" },
+  calCellSel:{ background:"#e8f0fe",outline:"1.5px solid #007aff" },
+  calCellPast:{ background:"#f9f9f9" },
+  calNum:{ width:24,height:24,borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,marginBottom:1 },
+  calCount:{ fontSize:9,color:"#007aff",fontWeight:600,background:"#eef4ff",borderRadius:4,padding:"1px 3px" },
+  calDot:{ width:5,height:5,borderRadius:"50%" },
+  detailCard:{ background:"#fff",borderRadius:14,padding:"14px",marginTop:12,boxShadow:"0 1px 4px rgba(0,0,0,0.06)" },
+  detailTitle:{ fontSize:15,fontWeight:600,color:"#1c1c1e" },
+  addDayBtn:{ fontSize:13,padding:"5px 12px",background:"#007aff",color:"#fff",border:"none",borderRadius:14,cursor:"pointer",fontWeight:500 },
+  legend:{ display:"flex",flexWrap:"wrap",gap:10,padding:"8px 4px",marginTop:4 },
+  legendItem:{ display:"flex",alignItems:"center",gap:5,fontSize:11,color:"#8e8e93" },
+  reqCard:{ background:"#fff",borderRadius:12,padding:"12px 14px",marginBottom:8,borderLeft:"3px solid #c7c7cc",boxShadow:"0 1px 3px rgba(0,0,0,0.06)" },
+  reqName:{ fontSize:15,fontWeight:600,color:"#1c1c1e" },
+  reqDate:{ fontSize:13,fontWeight:400,color:"#8e8e93" },
+  reqMeta:{ fontSize:12,color:"#8e8e93",marginTop:3 },
+  reqNote:{ fontSize:11,color:"#aeaeb2",marginTop:2 },
+  bukken:{ fontSize:12,color:"#6d4c00",background:"#fff8e6",borderRadius:5,padding:"2px 7px",display:"inline-block",marginTop:3,fontWeight:500 },
+  kouteiChip:{ fontSize:11,color:"#0055c1",background:"#eef3ff",borderRadius:5,padding:"1px 7px",display:"inline-block",marginTop:3 },
+  chipRow:{ display:"flex",flexWrap:"wrap",gap:5,marginTop:6,alignItems:"center" },
+  pill:{ fontSize:11,borderRadius:6,padding:"3px 8px",background:"#f2f2f7",color:"#8e8e93" },
+  disclosedChip:{ fontSize:10,borderRadius:5,padding:"2px 7px",background:"#e8faf0",color:"#1d8348",fontWeight:600 },
+  formCard:{ background:"#fff",borderRadius:16,padding:"20px 16px",boxShadow:"0 1px 4px rgba(0,0,0,0.06)" },
+  formTitle:{ fontSize:18,fontWeight:700,color:"#1c1c1e" },
+  formRow:{ marginBottom:12 },
+  formLabel:{ display:"block",fontSize:12,color:"#8e8e93",marginBottom:4,fontWeight:500 },
+  formInput:{ width:"100%",padding:"10px 12px",borderRadius:10,border:"1px solid #e5e5ea",fontSize:15,boxSizing:"border-box",background:"#fafafa",fontFamily:"inherit" },
+  formHint:{ fontSize:11,color:"#ff9500",marginTop:4 },
+  nameDrop:{ position:"absolute",top:"100%",left:0,right:0,background:"#fff",border:"1px solid #e5e5ea",borderRadius:10,zIndex:20,boxShadow:"0 4px 12px rgba(0,0,0,0.10)",overflow:"hidden" },
+  nameDropItem:{ padding:"12px 16px",fontSize:15,color:"#1c1c1e",cursor:"pointer",borderBottom:"0.5px solid #f2f2f7" },
+  nameDropClose:{ padding:"10px 16px",fontSize:13,color:"#8e8e93",textAlign:"center",cursor:"pointer" },
+  closeBtn:{ background:"none",border:"none",fontSize:18,color:"#8e8e93",cursor:"pointer",padding:"0 4px" },
+  btnPrimary:{ padding:"10px 20px",background:"#007aff",color:"#fff",border:"none",borderRadius:10,fontSize:14,fontWeight:600,cursor:"pointer",fontFamily:"inherit" },
+  btnGhost:{ padding:"10px 16px",background:"#f2f2f7",color:"#3c3c43",border:"none",borderRadius:10,fontSize:14,cursor:"pointer",fontFamily:"inherit" },
+  btnAssign:{ fontSize:13,padding:"7px 14px",background:"#f2f2f7",border:"none",borderRadius:8,cursor:"pointer",color:"#007aff",fontWeight:500,marginTop:8,fontFamily:"inherit" },
+  delBtn:{ background:"#fff0f0",border:"none",fontSize:13,color:"#ff3b30",cursor:"pointer",borderRadius:7,width:28,height:28,display:"flex",alignItems:"center",justifyContent:"center" },
+  undoBtn:{ background:"#f2f2f7",border:"none",fontSize:13,color:"#8e8e93",cursor:"pointer",borderRadius:7,width:28,height:28,display:"flex",alignItems:"center",justifyContent:"center" },
+  discloseBtnOff:{ fontSize:12,padding:"5px 12px",background:"#fff9e6",color:"#b07d00",border:"1px solid #f5d76e",borderRadius:7,cursor:"pointer",marginTop:6,fontFamily:"inherit" },
+  discloseBtnOn:{ fontSize:12,padding:"5px 12px",background:"#e8faf0",color:"#1d8348",border:"1px solid #a3e4b8",borderRadius:7,cursor:"pointer",marginTop:6,fontFamily:"inherit" },
+  sectionLabel:{ fontSize:12,fontWeight:600,color:"#8e8e93",marginBottom:8,paddingLeft:2 },
+  empty:{ textAlign:"center",color:"#aeaeb2",fontSize:14,padding:"24px 0" },
+  splitPanel:{ background:"#f9f9f9",borderRadius:10,padding:"12px",marginTop:8,border:"1px solid #e5e5ea" },
+  splitHint:{ fontSize:12,color:"#8e8e93",marginBottom:8 },
+  splitRow:{ display:"flex",alignItems:"center",gap:8,marginBottom:7 },
+  splitUnit:{ fontSize:12,color:"#aeaeb2" },
+  numInput:{ width:56,padding:"6px 8px",borderRadius:8,border:"1px solid #e5e5ea",fontSize:15,textAlign:"center",fontFamily:"inherit" },
+  vendorCard:{ background:"#fff",borderRadius:14,padding:"14px",marginBottom:10,borderTop:"3px solid",boxShadow:"0 1px 3px rgba(0,0,0,0.06)" },
+  vendorName:{ fontSize:16,fontWeight:700,marginBottom:2 },
+  vendorStat:{ fontSize:12,color:"#8e8e93",marginBottom:8,paddingBottom:8,borderBottom:"0.5px solid #f2f2f7" },
+  vendorRow:{ padding:"6px 0",borderBottom:"0.5px solid #f9f9f9" },
+  vendorEditPanel:{ background:"#fff",borderRadius:14,padding:"14px",marginBottom:12,boxShadow:"0 1px 3px rgba(0,0,0,0.06)" },
+  vendorEditRow:{ display:"flex",alignItems:"center",gap:8,marginBottom:8 },
+  orderBtn:{ background:"#f2f2f7",border:"none",borderRadius:6,width:28,height:28,cursor:"pointer",fontSize:14,color:"#3c3c43",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"inherit" },
+  editModeOffBtn:{ fontSize:13,padding:"5px 14px",background:"#f2f2f7",color:"#007aff",border:"none",borderRadius:14,cursor:"pointer",fontWeight:500 },
+  editModeOnBtn:{ fontSize:13,padding:"5px 14px",background:"#007aff",color:"#fff",border:"none",borderRadius:14,cursor:"pointer",fontWeight:600 },
+  toast:{ position:"fixed",bottom:28,left:"50%",transform:"translateX(-50%)",color:"#fff",borderRadius:20,padding:"10px 22px",fontSize:14,fontWeight:500,zIndex:100,boxShadow:"0 4px 16px rgba(0,0,0,0.18)",whiteSpace:"nowrap" },
+};
+
+const root = ReactDOM.createRoot(document.getElementById('root'));
+root.render(<App/>);
+</script>
+</body>
+</html>
