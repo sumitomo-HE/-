@@ -331,6 +331,7 @@ function VendorReqCard({ r, a, vendorId, vendors, vendorMembers, initialSelected
         <div style={{flex:1}}>
           <div style={{fontSize:11,color:"#aaa",marginBottom:2}}>管理者より</div>
           <div style={{fontSize:14,fontWeight:500,color:"#1a1a1a"}}>{r.bukken||"物件名未入力"}</div>
+          <div style={{fontSize:12,color:"#8e8e93",marginTop:2}}>担当：{r.name}</div>
           {r.koutei&&<div style={{fontSize:10,color:"#0055c1",background:"#eef3ff",borderRadius:4,padding:"1px 6px",display:"inline-block",marginTop:2}}>{r.koutei}</div>}
           <div style={{fontSize:12,color:"#8e8e93",marginTop:3}}>
             {a[vendorId]}人{r.tsubo?`　${r.tsubo}`:""}{r.floors?`　${r.floors}階`:""}
