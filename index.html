@@ -1431,10 +1431,10 @@ function App() {
               onEditRequest={(r)=>setEditingRequest(r)}
               highlightDates={highlightDates}
               memberAssignments={data.memberAssignments||{}}
-              onSaveAmount={role==="業者"?(reqId,vid,amount)=>{
+              onSaveAmount={role==="業者"?async(reqId,vid,amount)=>{
                 const va={...(data.vendorAmounts||{})};
                 va[reqId]={...(va[reqId]||{}),[vid]:amount};
-                updateData({...data, vendorAmounts:va});
+                await updateData({...data, vendorAmounts:va});
                 showToast("金額を保存しました");
               }:null}
               renderChangeStatus={role==="担当者"?((r)=>{
