@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"/>
   <title>建て方管理ツール</title>
   <meta name="apple-mobile-web-app-capable" content="yes"/>
   <meta name="apple-mobile-web-app-status-bar-style" content="default"/>
@@ -14,7 +14,7 @@
     * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
     html { overflow-x: hidden; width: 100%; }
     body { overflow-x: hidden; width: 100%; position: relative; -webkit-overflow-scrolling: touch; }
-    input, select, textarea { font-size: 16px !important; } /* iOSズーム防止 */
+    input, select, textarea { font-size: 16px; } /* iOSズーム防止 */
     body { margin: 0; padding: 0; background: #f7f7f8; font-family: 'Noto Sans JP', 'Hiragino Sans', sans-serif; font-weight: 300; overflow-x: hidden; width: 100%; }
     #root { max-width: 430px; width: 100%; margin: 0 auto; min-height: 100vh; overflow-x: hidden; }
     select, input, button, textarea { font-family: inherit; }
@@ -60,6 +60,7 @@ function loadVendorPasses() {
 function saveVendorPasses(p) { localStorage.setItem(VENDOR_PASSES_KEY, JSON.stringify(p)); }
 function getVendorPass(passes, vendorName) { return passes[vendorName] || "0000"; }
 const BIN_STORAGE_KEY = "荷揚げ_binid";
+const DEFAULT_BIN_ID = "6a23a553f5f4af5e29c12fb2";
 const VENDORS_STORAGE_KEY = "荷揚げ_vendors";
 const NAMES_STORAGE_KEY = "荷揚げ_names";
 
@@ -670,7 +671,14 @@ function App() {
   const [splitInputs, setSplitInputs] = useState({});
   const [toast, setToast] = useState(""); const [toastType, setToastType] = useState("ok");
   const [syncing, setSyncing] = useState(false); const [syncOk, setSyncOk] = useState(false);
-  const [binId, setBinId] = useState(()=>localStorage.getItem(BIN_STORAGE_KEY)||"");
+  const [binId, setBinId] = useState(()=>{
+    const saved = localStorage.getItem(BIN_STORAGE_KEY);
+    if(!saved) {
+      localStorage.setItem(BIN_STORAGE_KEY, DEFAULT_BIN_ID);
+      return DEFAULT_BIN_ID;
+    }
+    return saved;
+  });
   const [vendorEditMode, setVendorEditMode] = useState(false);
   const [vendorPriceCategories, setVendorPriceCategories] = useState(loadVendorPriceCategories);
   const [selectedCatVendor, setSelectedCatVendor] = useState(null);
@@ -956,20 +964,35 @@ function App() {
 
   // ── ロール選択 ──
   if(!role) return (
-    <div style={S.root}>
-      <div style={S.splash}>
+    <div style={{fontFamily:"'Noto Sans JP','Hiragino Sans',sans-serif",background:"#f7f7f8",minHeight:"100vh",maxWidth:430,margin:"0 auto",overflowX:"hidden",width:"100%"}}>
+      <div style={{padding:"48px 20px 32px",display:"flex",flexDirection:"column",alignItems:"center",width:"100%",boxSizing:"border-box"}}>
         <div style={{marginBottom:32,textAlign:"center"}}>
-          <div style={{fontFamily:"'Inter',sans-serif",fontSize:9,fontWeight:300,letterSpacing:8,color:"#aaaaaa",marginBottom:16,textTransform:"uppercase"}}>Sumitomo Forestry HE</div>
-          <div style={{fontSize:26,fontWeight:300,color:"#1a1a1a",letterSpacing:"0.15em",marginBottom:6}}>建て方管理ツール</div>
-          <div style={{width:24,height:1,background:"#1a1a1a",margin:"0 auto 10px"}}></div>
-          <div style={{fontFamily:"'Inter',sans-serif",fontSize:9,fontWeight:300,letterSpacing:5,color:"#bbbbbb",textTransform:"uppercase"}}>Kanagawa</div>
+          <div style={{fontSize:9,fontWeight:300,letterSpacing:8,color:"#aaaaaa",marginBottom:12}}>SUMITOMO FORESTRY HE</div>
+          <div style={{fontSize:24,fontWeight:300,color:"#1a1a1a",letterSpacing:"0.15em",marginBottom:8}}>建て方管理ツール</div>
+          <div style={{fontSize:9,fontWeight:300,letterSpacing:4,color:"#bbbbbb"}}>KANAGAWA</div>
         </div>
-        <div style={S.cloudChip}>
-          {binId?<><span style={{color:"#34c759"}}>●</span> クラウド連携済み</>:<><span style={{color:"#ff9500"}}>●</span> クラウド未設定</>}
-          {!binId&&<button style={S.chipBtn} onClick={setupCloud}>{syncing?"設定中…":"初期設定"}</button>}
-          {binId&&<button style={S.chipBtn} onClick={()=>pullFromCloud(binId)}>{syncing?"取得中…":"更新"}</button>}
+
+        <div style={{width:"100%",maxWidth:360,marginBottom:24}}>
+          <div style={{fontSize:11,color:"#888",marginBottom:10,textAlign:"center"}}>
+            {binId?"● クラウド連携済み":"● クラウド未設定"}
+          </div>
+          {!binId&&(
+            <div
+              style={{display:"block",width:"100%",padding:"16px",background:"#1a1a1a",color:"#fff",borderRadius:8,fontSize:15,textAlign:"center",WebkitUserSelect:"none"}}
+              onClick={()=>setupCloud()}>
+              初期設定する
+            </div>
+          )}
+          {binId&&(
+            <div
+              style={{display:"block",width:"100%",padding:"16px",background:"#1a1a1a",color:"#fff",borderRadius:8,fontSize:15,textAlign:"center",WebkitUserSelect:"none"}}
+              onClick={()=>pullFromCloud(binId)}>
+              {syncing?"取得中…":"↻ 最新データを取得"}
+            </div>
+          )}
         </div>
-        <div style={S.roleSection}>
+
+        <div style={{width:"100%",maxWidth:360,display:"flex",flexDirection:"column",gap:10}}>
           {[
             {key:"担当者",icon:"TN",desc:"予定を入力する",pin:false},
             {key:"管理者",icon:"MG",desc:"業者調整・開示（要パスワード）",pin:true,style:S.roleCardManager},
@@ -1642,7 +1665,7 @@ const S = {
   splashSub:{ fontSize:10,color:"#8e8e93",marginBottom:24,textAlign:"center",letterSpacing:"0.1em",fontWeight:500 },
   cloudChip:{ display:"flex",alignItems:"center",gap:8,background:"#fff",borderRadius:6,padding:"7px 14px",fontSize:10,fontWeight:300,color:"#888888",marginBottom:28,boxShadow:"0 1px 4px rgba(0,0,0,0.05)",letterSpacing:"0.08em",border:"1px solid #eeeeee" },
   chipBtn:{ fontSize:10,padding:"3px 9px",background:"#1a1a1a",color:"#fff",border:"none",borderRadius:4,cursor:"pointer",marginLeft:4,letterSpacing:"0.05em",fontWeight:300 },
-  roleSection:{ width:"100%",maxWidth:360,display:"flex",flexDirection:"column",gap:10 },
+  roleSection:{ width:"100%",maxWidth:360,display:"flex",flexDirection:"column",gap:10,position:"relative",zIndex:10 },
   roleCard:{ width:"100%",background:"#fff",border:"1px solid #eeeeee",borderRadius:12,padding:"16px 18px",display:"flex",alignItems:"center",gap:14,cursor:"pointer",boxShadow:"0 1px 6px rgba(0,0,0,0.04)",textAlign:"left" },
   roleCardManager:{ background:"#fafafa" },
   roleCardGyomu:{ background:"#fafafa" },
