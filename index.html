@@ -346,27 +346,15 @@ function VendorReqCard({ r, a, vendorId, vendors, vendorMembers, initialSelected
 
       {/* 金額入力 */}
       <div style={{marginTop:10,paddingTop:8,borderTop:"0.5px solid #f2f2f7"}}>
-        {!editingAmount ? (
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-            <span style={{fontSize:13,color:amount?"#1a1a1a":"#aaa",fontWeight:amount?600:400}}>
-              {amount?`請求金額：¥${Number(amount).toLocaleString()}`:"請求金額を入力"}
-            </span>
-            <button style={{fontSize:12,padding:"5px 12px",background:"#1a1a1a",color:"#fff",border:"none",borderRadius:6,cursor:"pointer"}}
-              onClick={()=>setEditingAmount(true)}>入力</button>
-          </div>
-        ) : (
-          <div>
-            <div style={{fontSize:11,color:"#8e8e93",marginBottom:6}}>請求金額（円）</div>
-            <div style={{display:"flex",gap:8}}>
-              <input type="number" style={{flex:1,padding:"8px 10px",borderRadius:7,border:"1px solid #ddd",fontSize:15,fontFamily:"inherit"}}
-                value={amount} onChange={e=>setAmount(e.target.value)} placeholder="例：150000"/>
-              <button style={{padding:"8px 14px",background:"#1a1a1a",color:"#fff",border:"none",borderRadius:7,fontSize:13,cursor:"pointer"}}
-                onClick={()=>{ onSaveAmount&&onSaveAmount(r.id,vendorId,amount); setEditingAmount(false); }}>保存</button>
-              <button style={{padding:"8px 10px",background:"#f5f5f5",color:"#888",border:"none",borderRadius:7,fontSize:13,cursor:"pointer"}}
-                onClick={()=>setEditingAmount(false)}>×</button>
-            </div>
-          </div>
-        )}
+        <div style={{fontSize:11,color:"#8e8e93",marginBottom:4}}>請求金額（円）</div>
+        <div style={{display:"flex",gap:8,alignItems:"center"}}>
+          <input type="number"
+            style={{flex:1,padding:"9px 10px",borderRadius:7,border:"1px solid #ddd",fontSize:15,fontFamily:"inherit",background:"#fafafa"}}
+            value={amount} onChange={e=>setAmount(e.target.value)} placeholder="タップして入力"/>
+          <button style={{padding:"9px 14px",background:"#1a1a1a",color:"#fff",border:"none",borderRadius:7,fontSize:13,cursor:"pointer",whiteSpace:"nowrap"}}
+            onClick={()=>{ onSaveAmount&&onSaveAmount(r.id,vendorId,amount); }}>保存</button>
+        </div>
+        {amount&&<div style={{fontSize:12,color:"#2d9e6b",marginTop:4,fontWeight:600}}>¥{Number(amount).toLocaleString()}</div>}
       </div>
 
       {/* メンバー割当 */}
