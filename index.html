@@ -335,8 +335,9 @@ function VendorReqCard({ r, a, vendorId, vendors, vendorMembers, initialSelected
           <div style={{fontSize:12,color:"#8e8e93",marginTop:3}}>
             {a[vendorId]}人{r.tsubo?`　${r.tsubo}`:""}{r.floors?`　${r.floors}階`:""}
           </div>
-          {r.daiku&&<div style={{fontSize:11,color:"#8e8e93"}}>大工：{r.daiku}</div>}
-          {r.rekkaa&&<div style={{fontSize:11,color:"#8e8e93"}}>レッカー：{r.rekkaa}</div>}
+          {r.daiku&&<div style={{fontSize:12,color:"#8e8e93",marginTop:2}}>大工：{r.daiku}</div>}
+          {r.rekkaa&&<div style={{fontSize:12,color:"#8e8e93",marginTop:2}}>レッカー：{r.rekkaa}</div>}
+          {r.note&&<div style={{fontSize:12,color:"#8e8e93",marginTop:2}}>備考：{r.note}</div>}
         </div>
         <button style={{background:"#fff0f0",border:"none",fontSize:12,color:"#ff3b30",cursor:"pointer",borderRadius:6,width:26,height:26,display:"flex",alignItems:"center",justifyContent:"center"}} onClick={onDelete}>✕</button>
       </div>
@@ -531,7 +532,7 @@ function CalendarView({ currentYM, setCurrentYM, requestsByDate, assignments, ve
           const isT=ds===today(); const isSel=ds===selDate;
           const past=isPast(ds); const wi=weekdayIdx(ds);
           // 業者モードでは開示済みのみ表示
-          const visibleReqs = vendorId ? reqs.filter(r=>{ const a=assignments[r.id]; return a&&a[vendorId]&&r.disclosed; }) : reqs;
+          const visibleReqs = vendorId ? reqs.filter(r=>{ const a=assignments[r.id]; return a&&a[vendorId]; }) : reqs;
           return (
             <button key={ds}
               style={{...S.calCell,...(isT?S.calCellToday:{}),...(isSel?S.calCellSel:{}),...(past&&!isT?S.calCellPast:{}),...(highlightDates&&highlightDates.includes(ds)?S.calCellHighlight:{})}}
@@ -572,7 +573,7 @@ function CalendarView({ currentYM, setCurrentYM, requestsByDate, assignments, ve
           </div>
 
           {/* 業者モード：開示済み案件 */}
-          {vendorId&&dateReqs.filter(r=>{ const a=assignments[r.id]; return a&&a[vendorId]&&r.disclosed; }).map(r=>{
+          {vendorId&&dateReqs.filter(r=>{ const a=assignments[r.id]; return a&&a[vendorId]; }).map(r=>{
             const a=assignments[r.id];
             return (
               <VendorReqCard
