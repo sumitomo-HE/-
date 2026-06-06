@@ -34,7 +34,7 @@ const { useState, useEffect, useRef, useCallback } = React;
 const DEFAULT_VENDORS = ["なんていい日だなぁ", "一柳重機", "kmax", "エクスト", "ステラ", "後熊", "深澤", "松井", "トラスト", "森田"];
 const PALETTE_COLORS = ["#3b6fd4","#2d9e6b","#d44f3b","#8e44ad","#e67e22","#16a085","#c0392b","#2980b9"];
 const PALETTE_BGS    = ["#eef3fc","#edf7f2","#fceeed","#f5eef8","#fdf2e9","#e8f8f5","#fdedec","#ebf5fb"];
-const KOUTEI_OPTIONS = ["","コラム建て","建て方１日目","建て方２日目","建て方３日目","建て方１日目（手起こし）","建て方２日目（手起こし）","建て方３日目（手起こし）","その他"];
+const KOUTEI_OPTIONS = ["","コラム建てam","コラム建てpm","建て方１日目","建て方２日目","建て方３日目","建て方１日目（手起こし）","建て方２日目（手起こし）","建て方３日目（手起こし）","その他"];
 const TSUBO_OPTIONS = ["","30坪未満","30坪","35坪","40坪","45坪","50坪","55坪","60坪","65坪","70坪","75坪","80坪","85坪","90坪","95坪","100坪","100坪以上"];
 const PRICE_CATEGORIES_DEFAULT = ["コラム", "建て方", "１日", "ハーフ"];
 const MANAGER_PASS = "0228";
@@ -857,6 +857,45 @@ function EditForm({ request, vendors, names, onSave, onCancel, syncing }) {
         onClick={handleSave} disabled={syncing}>
         {syncing?"保存中…":"更新する"}
       </button>
+    </div>
+  );
+}
+
+// ── 業務実績行コンポーネント ─────────────────────────
+function GyomuRow({ row, i, vendors, data, updateData, showToast, dayOfWeek, vendorColor }) {
+  const savedAmount = (data.vendorAmounts||{})[row.reqId]?.[(row.vendor)]||"";
+  const [amount, setAmount] = useState(savedAmount);
+
+  useEffect(()=>{
+    const a=(data.vendorAmounts||{})[row.reqId]?.[(row.vendor)]||"";
+    setAmount(a);
+  },[JSON.stringify(data.vendorAmounts), row.reqId, row.vendor]);
+
+  const handleSave = async () => {
+    const va={...(data.vendorAmounts||{})};
+    va[row.reqId]={...(va[row.reqId]||{}),[row.vendor]:amount};
+    await updateData({...data, vendorAmounts:va});
+    showToast("金額を保存しました");
+  };
+
+  return (
+    <div style={{background:i%2===0?"#fff":"#f9f9f9",borderBottom:"0.5px solid #f2f2f7",padding:"10px 12px"}}>
+      <div style={{display:"flex",gap:4,alignItems:"center",marginBottom:6}}>
+        <div style={{flex:2}}>
+          <div style={{fontSize:11,color:"#8e8e93"}}>{row.date}（{dayOfWeek(row.date)}）{row.koutei?`　${row.koutei}`:""}</div>
+          <div style={{fontSize:13,fontWeight:600,color:"#1c1c1e"}}>{row.bukken}</div>
+        </div>
+        <span style={{flex:1,textAlign:"center",fontSize:11,color:vendorColor(row.vendor,vendors),fontWeight:600}}>{row.vendor}</span>
+        <span style={{flex:1,textAlign:"center",fontSize:13}}>{row.count}人</span>
+      </div>
+      <div style={{display:"flex",gap:6,alignItems:"center"}}>
+        <span style={{fontSize:11,color:"#8e8e93",whiteSpace:"nowrap"}}>金額：</span>
+        <input type="number" style={{flex:1,padding:"6px 8px",borderRadius:6,border:"1px solid #ddd",fontSize:14,fontFamily:"inherit"}}
+          value={amount} onChange={e=>setAmount(e.target.value)} placeholder="金額を入力"/>
+        <button style={{padding:"6px 12px",background:"#1a1a1a",color:"#fff",border:"none",borderRadius:6,fontSize:12,cursor:"pointer",whiteSpace:"nowrap"}}
+          onClick={handleSave}>保存</button>
+        {amount&&<span style={{fontSize:12,color:"#2d9e6b",fontWeight:600,whiteSpace:"nowrap"}}>¥{Number(amount).toLocaleString()}</span>}
+      </div>
     </div>
   );
 }
@@ -1741,17 +1780,7 @@ function App() {
                 <span style={{flex:1,textAlign:"right"}}>金額</span>
               </div>
               {gyomuData.map((row,i)=>(
-                <div key={i} style={{...S.gyomuRow,...(i%2===0?{background:"#fff"}:{background:"#f9f9f9"})}}>
-                  <div style={{flex:2}}>
-                    <div style={{fontSize:11,color:"#8e8e93"}}>{row.date}（{dayOfWeek(row.date)}）{row.koutei?`　${row.koutei}`:""}</div>
-                    <div style={{fontSize:13,fontWeight:600,color:"#1c1c1e"}}>{row.bukken}</div>
-                  </div>
-                  <span style={{flex:1,textAlign:"center",fontSize:12,color:vendorColor(row.vendor,vendors),fontWeight:600}}>{row.vendor}</span>
-                  <span style={{flex:1,textAlign:"center",fontSize:13}}>{row.count}人</span>
-                  <span style={{flex:1,textAlign:"right",fontSize:13,fontWeight:600}}>
-                    {row.total>0?`¥${row.total.toLocaleString()}`:row.isVendorInput?"¥0":"未設定"}
-                  </span>
-                </div>
+                <GyomuRow key={i} row={row} i={i} vendors={vendors} data={data} updateData={updateData} showToast={showToast} dayOfWeek={dayOfWeek} vendorColor={vendorColor}/>
               ))}
               {gyomuData.length===0&&<div style={{padding:"20px",textAlign:"center",color:"#aeaeb2",fontSize:14}}>該当期間に開示済みの実績がありません</div>}
             </div>
