@@ -978,140 +978,94 @@ function MonthlyListView({ currentYM, setCurrentYM, requests, assignments, vendo
     setCurrentYM(d.toISOString().slice(0, 7));
   };
 
-  // 当月の案件を絞り込み
   const monthReqs = requests
     .filter(r => r.date.startsWith(currentYM))
     .filter(r => {
-      if (!vendorId) return true; // 管理者は全件
+      if (!vendorId) return true;
       const a = assignments[r.id];
-      return a && a[vendorId] && r.disclosed; // 業者は自分に割当・開示済みのみ
+      return a && a[vendorId] && r.disclosed;
     })
     .sort((a, b) => a.date.localeCompare(b.date));
 
-  const disclosed = (r) => r.disclosed;
-  const getVendors = (r) => {
-    const a = assignments[r.id];
-    if (!a) return null;
-    return Object.entries(a);
-  };
+  const totalCount = monthReqs.reduce((s, r) => {
+    if (vendorId && assignments[r.id]) return s + (assignments[r.id][vendorId] || 0);
+    return s + r.count;
+  }, 0);
 
   return (
     <div>
-      {/* ヘッダー */}
-      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:10 }}>
-        <div style={{ display:"flex", alignItems:"center", gap:4 }}>
-          <button type="button" style={{ background:"none", border:"none", fontSize:22, color:"#aaa", cursor:"pointer", padding:"0 6px" }} onClick={prevM}>‹</button>
-          <span style={{ fontSize:15, fontWeight:500, color:"#1a1a1a", letterSpacing:"0.08em" }}>{currentYM.replace("-","年")}月</span>
-          <button type="button" style={{ background:"none", border:"none", fontSize:22, color:"#aaa", cursor:"pointer", padding:"0 6px" }} onClick={nextM}>›</button>
+      {/* 月ナビ */}
+      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12 }}>
+        <div style={{ display:"flex", alignItems:"center", gap:2 }}>
+          <button type="button" style={{ background:"none", border:"none", fontSize:22, color:"#aaa", cursor:"pointer", padding:"0 8px" }} onClick={prevM}>‹</button>
+          <span style={{ fontSize:15, fontWeight:500, color:"#1a1a1a" }}>{currentYM.replace("-","年")}月</span>
+          <button type="button" style={{ background:"none", border:"none", fontSize:22, color:"#aaa", cursor:"pointer", padding:"0 8px" }} onClick={nextM}>›</button>
         </div>
-        <button type="button" style={{ fontSize:10, padding:"5px 10px", background:"#fff", border:"1px solid #eee", borderRadius:6, color:"#aaa", cursor:"pointer" }}
-          onClick={onRefresh} disabled={syncing}>
-          {syncing ? "取得中…" : "↻ 更新"}
-        </button>
+        <button type="button" style={{ fontSize:11, padding:"5px 10px", background:"#fff", border:"1px solid #eee", borderRadius:6, color:"#aaa", cursor:"pointer" }}
+          onClick={onRefresh} disabled={syncing}>{syncing ? "取得中…" : "↻ 更新"}</button>
       </div>
 
-      {/* 件数 */}
-      <div style={{ fontSize:11, color:"#aaa", marginBottom:10, letterSpacing:"0.05em" }}>
-        {monthReqs.length}件
+      {/* 合計バー */}
+      <div style={{ display:"flex", justifyContent:"space-between", background:"#1a1a1a", borderRadius:8, padding:"10px 14px", marginBottom:12 }}>
+        <span style={{ fontSize:12, color:"#aaa" }}>{monthReqs.length}件</span>
+        <span style={{ fontSize:14, fontWeight:700, color:"#fff" }}>合計 {totalCount}人</span>
       </div>
 
-      {/* 一覧テーブル */}
-      {monthReqs.length === 0 ? (
-        <div style={{ textAlign:"center", color:"#ccc", fontSize:14, padding:"32px 0" }}>該当する案件がありません</div>
-      ) : (
-        <div>
-          {/* ヘッダー行 */}
-          <div style={{ display:"grid", gridTemplateColumns:"70px 1fr 60px 60px 80px 50px", gap:4, padding:"6px 8px", background:"#f5f5f5", borderRadius:"8px 8px 0 0", fontSize:10, color:"#aaa", fontWeight:600, letterSpacing:"0.05em" }}>
-            <span>日付</span>
-            <span>物件名・担当</span>
-            <span style={{textAlign:"center"}}>工程</span>
-            <span style={{textAlign:"center"}}>人数</span>
-            <span style={{textAlign:"center"}}>業者</span>
-            <span style={{textAlign:"center"}}>開示</span>
-          </div>
-
-          {monthReqs.map((r, i) => {
-            const a = assignments[r.id];
-            const vendorEntries = a ? Object.entries(a) : [];
-            const isEven = i % 2 === 0;
-            return (
-              <div key={r.id} style={{
-                display:"grid", gridTemplateColumns:"70px 1fr 60px 60px 80px 50px",
-                gap:4, padding:"8px 8px",
-                background: isEven ? "#fff" : "#fafafa",
-                borderBottom:"0.5px solid #f0f0f0",
-                alignItems:"start"
-              }}>
-                {/* 日付 */}
-                <div>
-                  <div style={{ fontSize:12, color:"#1a1a1a", fontWeight:500 }}>
-                    {r.date.slice(5).replace("-","/")}
-                  </div>
-                  <div style={{ fontSize:10, color:"#aaa" }}>
-                    {dayOfWeek(r.date)}
-                  </div>
-                </div>
-
-                {/* 物件名・担当者 */}
-                <div>
-                  <div style={{ fontSize:12, fontWeight:600, color:"#1a1a1a", wordBreak:"break-all" }}>
-                    {r.bukken||"(物件名未入力)"}
-                  </div>
-                  <div style={{ fontSize:10, color:"#8e8e93", marginTop:1 }}>{r.name}</div>
-                </div>
-
-                {/* 工程 */}
-                <div style={{ fontSize:10, color:"#0055c1", textAlign:"center", wordBreak:"break-all" }}>
-                  {r.koutei||"-"}
-                </div>
-
-                {/* 人数 */}
-                <div style={{ fontSize:12, color:"#1a1a1a", textAlign:"center" }}>
-                  {vendorId && a && a[vendorId] ? `${a[vendorId]}人` : `${r.count}人`}
-                </div>
-
-                {/* 割当業者 */}
-                <div style={{ textAlign:"center" }}>
-                  {vendorEntries.length > 0 ? (
-                    <div style={{ display:"flex", flexDirection:"column", gap:2, alignItems:"center" }}>
-                      {vendorEntries.map(([v, c]) => (
-                        <span key={v} style={{
-                          fontSize:9, padding:"1px 5px", borderRadius:4,
-                          background: vendorBg(v, vendors),
-                          color: vendorColor(v, vendors),
-                          fontWeight:600, whiteSpace:"nowrap"
-                        }}>{v}</span>
-                      ))}
-                    </div>
-                  ) : (
-                    <span style={{ fontSize:10, color:"#ccc" }}>未割当</span>
-                  )}
-                </div>
-
-                {/* 開示状況 */}
-                <div style={{ textAlign:"center" }}>
-                  {r.disclosed ? (
-                    <span style={{ fontSize:9, padding:"2px 5px", borderRadius:4, background:"#e8faf0", color:"#1d8348", fontWeight:600 }}>開示済</span>
-                  ) : (
-                    <span style={{ fontSize:9, padding:"2px 5px", borderRadius:4, background:"#f5f5f5", color:"#ccc" }}>未</span>
-                  )}
-                </div>
-              </div>
-            );
-          })}
-
-          {/* 合計行 */}
-          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"10px 8px", background:"#1a1a1a", borderRadius:"0 0 8px 8px", marginTop:0 }}>
-            <span style={{ fontSize:12, color:"#fff", fontWeight:500 }}>合計</span>
-            <span style={{ fontSize:14, color:"#fff", fontWeight:700 }}>
-              {monthReqs.reduce((s, r) => {
-                if(vendorId && assignments[r.id]) return s + (assignments[r.id][vendorId]||0);
-                return s + r.count;
-              }, 0)}人　{monthReqs.length}件
-            </span>
-          </div>
-        </div>
+      {/* 案件なし */}
+      {monthReqs.length === 0 && (
+        <div style={{ textAlign:"center", color:"#ccc", fontSize:14, padding:"40px 0" }}>案件がありません</div>
       )}
+
+      {/* カード一覧 */}
+      {monthReqs.map((r, i) => {
+        const a = assignments[r.id];
+        const vendorEntries = a ? Object.entries(a) : [];
+        return (
+          <div key={r.id} style={{ background:"#fff", borderRadius:10, padding:"12px 14px", marginBottom:8, boxShadow:"0 1px 3px rgba(0,0,0,0.05)", borderLeft:`3px solid ${a ? vendorColor(Object.keys(a)[0], vendors) : "#ddd"}` }}>
+            {/* 1行目：日付・工程・開示 */}
+            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:6 }}>
+              <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+                <span style={{ fontSize:13, fontWeight:600, color:"#1a1a1a" }}>
+                  {r.date.slice(5).replace("-","/")}（{dayOfWeek(r.date)}）
+                </span>
+                {r.koutei && (
+                  <span style={{ fontSize:10, padding:"2px 7px", borderRadius:4, background:"#eef3ff", color:"#0055c1" }}>{r.koutei}</span>
+                )}
+              </div>
+              {r.disclosed
+                ? <span style={{ fontSize:10, padding:"2px 7px", borderRadius:4, background:"#e8faf0", color:"#1d8348", fontWeight:600 }}>開示済</span>
+                : <span style={{ fontSize:10, padding:"2px 7px", borderRadius:4, background:"#f5f5f5", color:"#ccc" }}>未開示</span>
+              }
+            </div>
+
+            {/* 2行目：物件名 */}
+            <div style={{ fontSize:14, fontWeight:600, color:"#1a1a1a", marginBottom:4 }}>
+              {r.bukken || "(物件名未入力)"}
+            </div>
+
+            {/* 3行目：担当者・人数 */}
+            <div style={{ display:"flex", gap:12, alignItems:"center", marginBottom:4 }}>
+              <span style={{ fontSize:11, color:"#8e8e93" }}>担当：{r.name}</span>
+              <span style={{ fontSize:11, color:"#8e8e93" }}>
+                {vendorId && a && a[vendorId] ? `${a[vendorId]}人` : `${r.count}人`}
+              </span>
+            </div>
+
+            {/* 4行目：割当業者 */}
+            {vendorEntries.length > 0 ? (
+              <div style={{ display:"flex", flexWrap:"wrap", gap:4, marginTop:4 }}>
+                {vendorEntries.map(([v, c]) => (
+                  <span key={v} style={{ fontSize:11, padding:"2px 8px", borderRadius:5, background:vendorBg(v, vendors), color:vendorColor(v, vendors), fontWeight:600 }}>
+                    {v} {c}人
+                  </span>
+                ))}
+              </div>
+            ) : (
+              <span style={{ fontSize:11, color:"#ccc" }}>未割当</span>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -1600,7 +1554,7 @@ function App() {
 
   // ── ナビ定義 ──
   const navItems = {
-    担当者: [{key:"calendar",label:"カレンダー",icon:"📅"},{key:"input",label:"予定登録",icon:"＋"}],
+    担当者: [{key:"calendar",label:"カレンダー",icon:"📅"},{key:"list",label:"一覧",icon:"📋"},{key:"input",label:"予定登録",icon:"＋"}],
     管理者: [{key:"calendar",label:"カレンダー",icon:"📅"},{key:"list",label:"一覧",icon:"📋"},{key:"adjust",label:"業者調整",icon:"⚙️"},{key:"vendors",label:"業者一覧",icon:"🏢"}],
     業者:   [{key:"calendar",label:"カレンダー",icon:"📅"},{key:"list",label:"一覧",icon:"📋"},{key:"members",label:"メンバー",icon:"👥"},{key:"schedules",label:"スケジュール",icon:"📌"}],
     業務:   [{key:"list",label:"実績一覧",icon:"📋"},{key:"settings",label:"単価設定",icon:"💴"}],
@@ -1751,8 +1705,8 @@ function App() {
           <RegisterForm initialDate={today()} vendors={vendors} names={names} onSave={handleRegister} syncing={syncing}/>
         )}
 
-        {/* ── 月間一覧（管理者・業者） ── */}
-        {view==="list"&&(role==="管理者"||role==="業者")&&(
+        {/* ── 月間一覧（担当者・管理者・業者） ── */}
+        {view==="list"&&(role==="担当者"||role==="管理者"||role==="業者")&&(
           <MonthlyListView
             currentYM={currentYM}
             setCurrentYM={setCurrentYM}
