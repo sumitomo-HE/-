@@ -617,7 +617,8 @@ function CalendarView({ currentYM, setCurrentYM, requestsByDate, assignments, ve
                 {r.daiku&&<div style={{fontSize:11,color:"#8e8e93",marginTop:2}}>大工：{r.daiku}</div>}
                 {r.rekkaa&&<div style={{fontSize:11,color:"#8e8e93",marginTop:2}}>レッカー：{r.rekkaa}</div>}
                 {r.note&&<div style={S.reqNote}>{r.note}</div>}
-                {r.annaizu&&<img src={r.annaizu} style={{maxWidth:"100%",borderRadius:6,marginTop:6,border:"1px solid #eeeeee"}}/>}
+                {r.annaizu&&<img src={r.annaizu} style={{maxWidth:"100%",borderRadius:6,marginTop:6,border:"1px solid #eeeeee",display:"block"}}/>}
+                {r.annaizu2&&<img src={r.annaizu2} style={{maxWidth:"100%",borderRadius:6,marginTop:6,border:"1px solid #eeeeee",display:"block"}}/>}
                 <div style={{...S.chipRow,justifyContent:"space-between"}}>
                   <div style={S.chipRow}>
                     {a ? Object.entries(a).map(([v,c])=>(
@@ -781,9 +782,10 @@ function RegisterForm({ initialDate, vendors, names, onSave, onCancel, syncing }
       </div>
       <div style={S.formRow}>
         <label style={S.formLabel}>備考</label>
-        <input style={S.formInput} value={form.note} onChange={e=>setForm(f=>({...f,note:e.target.value}))} placeholder="メモ"/>
+        <input style={S.formInput} value={form.note} onChange={e=>setForm(f=>({...f,note:e.target.value}))} placeholder="例）資材13時納品"/>
       </div>
-      <AnnaizuUploader annaizu={form.annaizu} onSelect={b64=>setForm(f=>({...f,annaizu:b64}))} onClear={()=>setForm(f=>({...f,annaizu:""}))}/>
+      <AnnaizuUploader annaizu={form.annaizu} onSelect={b64=>setForm(f=>({...f,annaizu:b64}))} onClear={()=>setForm(f=>({...f,annaizu:""}))} label="案内図１（PNG/JPG）"/>
+      <AnnaizuUploader annaizu={form.annaizu2} onSelect={b64=>setForm(f=>({...f,annaizu2:b64}))} onClear={()=>setForm(f=>({...f,annaizu2:""}))} label="案内図２（PNG/JPG）"/>
       <button style={{...S.btnPrimary,width:"100%",marginTop:16,padding:"14px",fontSize:16,opacity:syncing?0.6:1}} onClick={handleSave} disabled={syncing}>
         {syncing?"保存中…":"登録する"}
       </button>
@@ -792,7 +794,7 @@ function RegisterForm({ initialDate, vendors, names, onSave, onCancel, syncing }
 }
 
 // ── 案内図アップローダー ─────────────────────────────
-function AnnaizuUploader({ annaizu, onSelect, onClear }) {
+function AnnaizuUploader({ annaizu, onSelect, onClear, label }) {
   const inputRef = useRef(null);
 
   const handleChange = (e) => {
@@ -813,7 +815,7 @@ function AnnaizuUploader({ annaizu, onSelect, onClear }) {
 
   return (
     <div style={S.formRow}>
-      <label style={S.formLabel}>案内図（PNG/JPG・1枚）</label>
+      <label style={S.formLabel}>{label||"案内図（PNG/JPG・1枚）"}</label>
       {annaizu ? (
         <div>
           <img src={annaizu} style={{maxWidth:"100%",maxHeight:200,borderRadius:8,marginBottom:8,border:"1px solid #eee",display:"block"}}/>
@@ -846,7 +848,12 @@ function EditForm({ request, vendors, names, onSave, onCancel, syncing }) {
     count: request.count||'',
     tsubo: request.tsubo||"",
     floors: request.floors||"",
-    note: request.note||""
+    note: request.note||"",
+    daiku: request.daiku||"",
+    daikuMode: request.daikuMode||"input",
+    rekkaa: request.rekkaa||"",
+    annaizu: request.annaizu||"",
+    annaizu2: request.annaizu2||""
   });
   const handleSave = () => {
     if(!form.name||!form.date||!form.count) return;
