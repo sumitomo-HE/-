@@ -36,7 +36,7 @@ const PALETTE_COLORS = ["#3b6fd4","#2d9e6b","#d44f3b","#8e44ad","#e67e22","#16a0
 const PALETTE_BGS    = ["#eef3fc","#edf7f2","#fceeed","#f5eef8","#fdf2e9","#e8f8f5","#fdedec","#ebf5fb"];
 const KOUTEI_OPTIONS = ["","コラム建てam","コラム建てpm","建て方１日目","建て方２日目","建て方３日目","建て方１日目（手起こし）","建て方２日目（手起こし）","建て方３日目（手起こし）","その他"];
 const TSUBO_OPTIONS = ["","30坪未満","30坪","35坪","40坪","45坪","50坪","55坪","60坪","65坪","70坪","75坪","80坪","85坪","90坪","95坪","100坪","100坪以上"];
-const PRICE_CATEGORIES_DEFAULT = ["コラム", "建て方", "１日", "ハーフ"];
+const PRICE_CATEGORIES_DEFAULT = [];
 const MANAGER_PASS = "0228";
 const GYOMU_PASS = "0228";
 const API_KEY = "$2a$10$1O88cF7wXbf2pSTZZxqBr.uqcIg5ILcQf9fGrbZmJyf780h0jIqq.";
@@ -44,12 +44,18 @@ const JSONBIN_BASE = "https://api.jsonbin.io/v3";
 const STORAGE_KEY = "荷揚げv6";
 const PRICE_CAT_KEY = "荷揚げ_vendorPriceCategories";
 function loadVendorPriceCategories() {
-  try { const r = localStorage.getItem(PRICE_CAT_KEY); return r ? JSON.parse(r) : {}; }
+  try {
+    const r = localStorage.getItem(PRICE_CAT_KEY);
+    if(!r) return {};
+    const saved = JSON.parse(r);
+    // 既存カテゴリをそのまま使用（デフォルトは空）
+    return saved;
+  }
   catch { return {}; }
 }
 function saveVendorPriceCategories(c) { localStorage.setItem(PRICE_CAT_KEY, JSON.stringify(c)); }
 function getVendorCategories(vpcMap, vendorName) {
-  return vpcMap[vendorName] || [...PRICE_CATEGORIES_DEFAULT];
+  return vpcMap[vendorName] || [];
 }
 const VENDOR_PASSES_KEY = "荷揚げ_vendorPasses";
 
@@ -1545,7 +1551,7 @@ function App() {
   // ── PIN画面 ──
   if(showPin) return (
     <PinPad title={showPin==="管理者"?"管理者ログイン":"業務モード"}
-      onSuccess={()=>{ setRole(showPin); setShowPin(null); setView("calendar"); }}
+      onSuccess={()=>{ setRole(showPin); setShowPin(null); setView(showPin==="業務"?"list":"calendar"); }}
       onCancel={()=>setShowPin(null)}/>
   );
 
