@@ -344,7 +344,8 @@ function VendorReqCard({ r, a, vendorId, vendors, vendorMembers, initialSelected
       </div>
 
       {/* 案内図 */}
-      {r.annaizu&&<img src={r.annaizu} style={{maxWidth:"100%",borderRadius:6,marginTop:6,border:"1px solid #eee"}}/>}
+      {r.annaizu&&<img src={r.annaizu} style={{maxWidth:"100%",borderRadius:6,marginTop:6,border:"1px solid #eee",display:"block"}}/>}
+      {r.annaizu2&&<img src={r.annaizu2} style={{maxWidth:"100%",borderRadius:6,marginTop:6,border:"1px solid #eee",display:"block"}}/>}
 
       {/* 金額入力 */}
       <div style={{marginTop:10,paddingTop:8,borderTop:"0.5px solid #f2f2f7",boxSizing:"border-box",width:"100%",overflow:"hidden"}}>
@@ -617,8 +618,7 @@ function CalendarView({ currentYM, setCurrentYM, requestsByDate, assignments, ve
                 {r.daiku&&<div style={{fontSize:11,color:"#8e8e93",marginTop:2}}>大工：{r.daiku}</div>}
                 {r.rekkaa&&<div style={{fontSize:11,color:"#8e8e93",marginTop:2}}>レッカー：{r.rekkaa}</div>}
                 {r.note&&<div style={S.reqNote}>{r.note}</div>}
-                {r.annaizu&&<img src={r.annaizu} style={{maxWidth:"100%",borderRadius:6,marginTop:6,border:"1px solid #eeeeee",display:"block"}}/>}
-                {r.annaizu2&&<img src={r.annaizu2} style={{maxWidth:"100%",borderRadius:6,marginTop:6,border:"1px solid #eeeeee",display:"block"}}/>}
+                {/* 管理者・担当者モードでは画像非表示 */}
                 <div style={{...S.chipRow,justifyContent:"space-between"}}>
                   <div style={S.chipRow}>
                     {a ? Object.entries(a).map(([v,c])=>(
@@ -916,6 +916,8 @@ function EditForm({ request, vendors, names, onSave, onCancel, syncing }) {
         <label style={S.formLabel}>備考</label>
         <input style={S.formInput} value={form.note} onChange={e=>setForm(f=>({...f,note:e.target.value}))} placeholder="メモ"/>
       </div>
+      <AnnaizuUploader annaizu={form.annaizu} onSelect={b64=>setForm(f=>({...f,annaizu:b64}))} onClear={()=>setForm(f=>({...f,annaizu:""}))} label="案内図１（PNG/JPG）"/>
+      <AnnaizuUploader annaizu={form.annaizu2} onSelect={b64=>setForm(f=>({...f,annaizu2:b64}))} onClear={()=>setForm(f=>({...f,annaizu2:""}))} label="案内図２（PNG/JPG）"/>
       <button type="button" style={{...S.btnPrimary,width:"100%",marginTop:16,padding:"14px",fontSize:16,opacity:syncing?0.6:1}}
         onClick={handleSave} disabled={syncing}>
         {syncing?"保存中…":"更新する"}
@@ -1086,8 +1088,8 @@ function App() {
     // 30日以上前の案件の画像を自動削除
     const thirtyDaysAgo = new Date(); thirtyDaysAgo.setDate(thirtyDaysAgo.getDate()-30);
     const cleanedRequests = data.requests.map(r => {
-      if(r.annaizu && new Date(r.date) < thirtyDaysAgo) {
-        return {...r, annaizu:""};
+      if(new Date(r.date) < thirtyDaysAgo) {
+        return {...r, annaizu:"", annaizu2:""};
       }
       return r;
     });
