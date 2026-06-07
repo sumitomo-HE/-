@@ -502,7 +502,7 @@ function MemberAssignCard({ r, a, vendorId, vendors, vendorMembers, onDelete, on
 }
 
 // ── カレンダーコンポーネント ──────────────────────
-function CalendarView({ currentYM, setCurrentYM, requestsByDate, assignments, vendors, role, vendorId, vendorSchedules, onDayTap, onAddSchedule, onDeleteSchedule, onDeleteRequest, renderSplitUI, renderDiscloseBtn, vendorMembers, onSaveMemberAssign, onEditRequest, renderChangeStatus, highlightDates, memberAssignments, onSaveAmount }) {
+function CalendarView({ currentYM, setCurrentYM, requestsByDate, assignments, vendors, role, vendorId, vendorSchedules, onDayTap, onAddSchedule, onDeleteSchedule, onDeleteRequest, renderSplitUI, renderDiscloseBtn, vendorMembers, onSaveMemberAssign, onEditRequest, renderChangeStatus, highlightDates, memberAssignments, onSaveAmount, allRequests, vendorAmounts }) {
   const days = daysInMonth(currentYM);
   const firstDay = new Date(currentYM+"-01").getDay();
   const [selDate, setSelDate] = useState(null);
@@ -658,6 +658,31 @@ function CalendarView({ currentYM, setCurrentYM, requestsByDate, assignments, ve
           )}
         </div>
       )}
+
+      {/* 業者月合計 */}
+      {vendorId&&allRequests&&(()=>{
+        const monthReqs = allRequests.filter(r=>r.date.startsWith(currentYM));
+        const assignedReqs = monthReqs.filter(r=>{ const a=assignments[r.id]; return a&&a[vendorId]&&r.disclosed; });
+        const monthTotal = assignedReqs.reduce((sum,r)=>{
+          const va=(vendorAmounts||{})[r.id];
+          return sum + (va&&va[vendorId]?Number(va[vendorId]):0);
+        },0);
+        if(assignedReqs.length===0) return null;
+        return (
+          <div style={{background:"#1a1a1a",borderRadius:10,padding:"12px 16px",marginBottom:10,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+            <div>
+              <div style={{fontSize:10,color:"#888",letterSpacing:"0.08em"}}>{currentYM.replace("-","年")}月の実績</div>
+              <div style={{fontSize:12,color:"#aaa",marginTop:2}}>{assignedReqs.length}件</div>
+            </div>
+            <div style={{textAlign:"right"}}>
+              <div style={{fontSize:11,color:"#888"}}>請求合計</div>
+              <div style={{fontSize:20,fontWeight:600,color:monthTotal>0?"#2d9e6b":"#888"}}>
+                {monthTotal>0?`¥${monthTotal.toLocaleString()}`:"未入力"}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* 凡例 */}
       <div style={S.legend}>
@@ -1464,33 +1489,6 @@ function App() {
             <button style={S.refreshBtn} onClick={()=>pullFromCloud(binId)} disabled={syncing}>
               {syncing?"取得中…":"↻ 最新データを取得"}
             </button>
-            {role==="業者"&&vendorId&&(()=>{
-              const monthTotal = data.requests.reduce((sum,r)=>{
-                if(!r.date.startsWith(currentYM)) return sum;
-                const va=(data.vendorAmounts||{})[r.id];
-                if(va&&va[vendorId]) return sum+Number(va[vendorId]);
-                return sum;
-              },0);
-              const monthCount = data.requests.filter(r=>{
-                if(!r.date.startsWith(currentYM)) return false;
-                const a=data.assignments[r.id];
-                return a&&a[vendorId]&&r.disclosed;
-              }).length;
-              return monthCount>0?(
-                <div style={{background:"#1a1a1a",borderRadius:10,padding:"12px 16px",marginBottom:10,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                  <div>
-                    <div style={{fontSize:10,color:"#888",letterSpacing:"0.1em"}}>{currentYM.replace("-","年")}月の実績</div>
-                    <div style={{fontSize:12,color:"#aaa",marginTop:2}}>{monthCount}件</div>
-                  </div>
-                  <div style={{textAlign:"right"}}>
-                    <div style={{fontSize:11,color:"#888"}}>請求合計</div>
-                    <div style={{fontSize:20,fontWeight:600,color:monthTotal>0?"#2d9e6b":"#888"}}>
-                      {monthTotal>0?`¥${monthTotal.toLocaleString()}`:"未入力"}
-                    </div>
-                  </div>
-                </div>
-              ):null;
-            })()}
             <CalendarView
               currentYM={currentYM} setCurrentYM={setCurrentYM}
               requestsByDate={requestsByDate} assignments={data.assignments}
@@ -1505,6 +1503,8 @@ function App() {
               onEditRequest={(r)=>setEditingRequest(r)}
               highlightDates={highlightDates}
               memberAssignments={data.memberAssignments||{}}
+              allRequests={data.requests}
+              vendorAmounts={data.vendorAmounts||{}}
               onSaveAmount={role==="業者"?async(reqId,vid,amount)=>{
                 const va={...(data.vendorAmounts||{})};
                 va[reqId]={...(va[reqId]||{}),[vid]:amount};
