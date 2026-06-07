@@ -27,6 +27,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script type="text/babel">
 const { useState, useEffect, useRef, useCallback } = React;
 
@@ -1031,6 +1032,62 @@ function MonthlyListView({ currentYM, setCurrentYM, requests, assignments, vendo
         <span style={{ fontSize:12, color:"#aaa" }}>{monthReqs.length}件</span>
         <span style={{ fontSize:14, fontWeight:700, color:"#fff" }}>合計 {totalCount}人</span>
       </div>
+
+      {/* Excel出力ボタン */}
+      {monthReqs.length > 0 && (
+        <button type="button"
+          style={{ width:"100%", padding:"10px", marginBottom:12, background:"#1e7e34", color:"#fff", border:"none", borderRadius:8, fontSize:13, fontWeight:600, cursor:"pointer", letterSpacing:"0.05em" }}
+          onClick={()=>{
+            // SheetJSを使ってExcel出力
+            const XLSX = window.XLSX;
+            if(!XLSX){ alert("Excel出力の準備中です。少し待ってから再試行してください。"); return; }
+
+            // ヘッダー
+            const headers = ["日付","曜日","物件名","担当者","工程","人数","割当業者","開示状況"];
+
+            // データ行
+            const rows = monthReqs.map(r => {
+              const a = assignments[r.id];
+              const vendorStr = a ? Object.entries(a).map(([v,c])=>`${v} ${c}人`).join("・") : "未割当";
+              const cnt = vendorId && a && a[vendorId] ? a[vendorId] : r.count;
+              return [
+                r.date,
+                dayOfWeek(r.date),
+                r.bukken || "",
+                r.name || "",
+                r.koutei || "",
+                cnt,
+                vendorStr,
+                r.disclosed ? "開示済" : "未開示"
+              ];
+            });
+
+            // ワークシート作成
+            const wsData = [headers, ...rows];
+            const ws = XLSX.utils.aoa_to_sheet(wsData);
+
+            // 列幅設定（A4縦に合わせる）
+            ws["!cols"] = [
+              {wch:12}, // 日付
+              {wch:5},  // 曜日
+              {wch:20}, // 物件名
+              {wch:10}, // 担当者
+              {wch:16}, // 工程
+              {wch:6},  // 人数
+              {wch:24}, // 割当業者
+              {wch:8},  // 開示状況
+            ];
+
+            // ワークブック作成
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, `${currentYM}月一覧`);
+
+            // ダウンロード
+            XLSX.writeFile(wb, `建て方管理_${currentYM}.xlsx`);
+          }}>
+          📥 Excel出力
+        </button>
+      )}
 
       {/* 案件なし */}
       {monthReqs.length === 0 && (
