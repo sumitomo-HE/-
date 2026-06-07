@@ -967,6 +967,8 @@ function GyomuRow({ row, i, vendors, data, updateData, showToast, dayOfWeek, ven
 
 // ── 月間一覧コンポーネント ───────────────────────────
 function MonthlyListView({ currentYM, setCurrentYM, requests, assignments, vendors, vendorId, role, vendorColor, vendorBg, dayOfWeek, onRefresh, syncing }) {
+  const [sortMode, setSortMode] = React.useState("date"); // "date" | "name"
+
   const prevM = () => {
     const d = new Date(currentYM + "-01");
     d.setMonth(d.getMonth() - 1);
@@ -985,7 +987,14 @@ function MonthlyListView({ currentYM, setCurrentYM, requests, assignments, vendo
       const a = assignments[r.id];
       return a && a[vendorId] && r.disclosed;
     })
-    .sort((a, b) => a.date.localeCompare(b.date));
+    .sort((a, b) => {
+      if(sortMode === "name") {
+        const nameComp = (a.name||"").localeCompare(b.name||"", "ja");
+        if(nameComp !== 0) return nameComp;
+        return a.date.localeCompare(b.date);
+      }
+      return a.date.localeCompare(b.date);
+    });
 
   const totalCount = monthReqs.reduce((s, r) => {
     if (vendorId && assignments[r.id]) return s + (assignments[r.id][vendorId] || 0);
@@ -1004,6 +1013,18 @@ function MonthlyListView({ currentYM, setCurrentYM, requests, assignments, vendo
         <button type="button" style={{ fontSize:11, padding:"5px 10px", background:"#fff", border:"1px solid #eee", borderRadius:6, color:"#aaa", cursor:"pointer" }}
           onClick={onRefresh} disabled={syncing}>{syncing ? "取得中…" : "↻ 更新"}</button>
       </div>
+
+      {/* ソートボタン（担当者モードのみ） */}
+      {role === "担当者" && (
+        <div style={{ display:"flex", gap:8, marginBottom:10 }}>
+          <button type="button"
+            style={{ flex:1, padding:"7px", borderRadius:7, border:`1px solid ${sortMode==="date"?"#1a1a1a":"#eee"}`, background:sortMode==="date"?"#1a1a1a":"#fff", color:sortMode==="date"?"#fff":"#888", fontSize:12, cursor:"pointer" }}
+            onClick={()=>setSortMode("date")}>日付順</button>
+          <button type="button"
+            style={{ flex:1, padding:"7px", borderRadius:7, border:`1px solid ${sortMode==="name"?"#1a1a1a":"#eee"}`, background:sortMode==="name"?"#1a1a1a":"#fff", color:sortMode==="name"?"#fff":"#888", fontSize:12, cursor:"pointer" }}
+            onClick={()=>setSortMode("name")}>担当者順</button>
+        </div>
+      )}
 
       {/* 合計バー */}
       <div style={{ display:"flex", justifyContent:"space-between", background:"#1a1a1a", borderRadius:8, padding:"10px 14px", marginBottom:12 }}>
