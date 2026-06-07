@@ -104,8 +104,8 @@ function loadLocal() {
       }
       return parsed;
     }
-    return { requests:[], assignments:{}, vendorMembers:DEFAULT_VENDOR_MEMBERS, vendorSchedules:{}, unitPrices:{}, orders:[], vendorAmounts:{}, memberAssignments:{}, changeRequests:[] };
-  } catch { return { requests:[], assignments:{}, vendorMembers:DEFAULT_VENDOR_MEMBERS, vendorSchedules:{}, unitPrices:{}, orders:[], vendorAmounts:{}, memberAssignments:{}, changeRequests:[] }; }
+    return { requests:[], assignments:{}, vendorMembers:DEFAULT_VENDOR_MEMBERS, vendorSchedules:{}, unitPrices:{}, orders:[], vendorAmounts:{}, memberAssignments:{}, changeRequests:[], orderStatus:{} };
+  } catch { return { requests:[], assignments:{}, vendorMembers:DEFAULT_VENDOR_MEMBERS, vendorSchedules:{}, unitPrices:{}, orders:[], vendorAmounts:{}, memberAssignments:{}, changeRequests:[], orderStatus:{} }; }
 }
 function saveLocal(d) { localStorage.setItem(STORAGE_KEY, JSON.stringify(d)); }
 function loadVendors() {
@@ -926,6 +926,105 @@ function EditForm({ request, vendors, names, onSave, onCancel, syncing }) {
   );
 }
 
+// ── 発注一覧コンポーネント ──────────────────────────────
+function OrderListView({ data, updateData, vendors, vendorColor, vendorBg, dayOfWeek, showToast }) {
+  const [filter, setFilter] = useState("all"); // all | ordered | pending
+
+  const orderStatus = data.orderStatus || {};
+  const assignments = data.assignments || {};
+  const vendorAmounts = data.vendorAmounts || {};
+
+  // 開示済みで割当済みの案件を全件取得
+  const allRows = [];
+  data.requests.forEach(r => {
+    if(!r.disclosed) return;
+    const a = assignments[r.id];
+    if(!a) return;
+    Object.entries(a).forEach(([vid, cnt]) => {
+      const orderKey = `${r.id}_${vid}`;
+      const isOrdered = !!orderStatus[orderKey];
+      const amount = (vendorAmounts[r.id]||{})[vid]||0;
+      allRows.push({ reqId:r.id, vendor:vid, count:cnt, date:r.date, bukken:r.bukken||"物件名未入力", koutei:r.koutei, amount, isOrdered, orderKey, orderedAt:(orderStatus[orderKey]||{}).orderedAt });
+    });
+  });
+  allRows.sort((a,b)=>a.date.localeCompare(b.date));
+
+  const filteredRows = allRows.filter(r => {
+    if(filter==="ordered") return r.isOrdered;
+    if(filter==="pending") return !r.isOrdered;
+    return true;
+  });
+
+  const pendingCount = allRows.filter(r=>!r.isOrdered).length;
+  const orderedCount = allRows.filter(r=>r.isOrdered).length;
+
+  const toggleOrder = async (row) => {
+    const os = {...(data.orderStatus||{})};
+    if(row.isOrdered) {
+      delete os[row.orderKey];
+    } else {
+      os[row.orderKey] = { orderedAt: new Date().toISOString(), vendor: row.vendor, bukken: row.bukken, date: row.date };
+    }
+    await updateData({...data, orderStatus: os});
+    showToast(row.isOrdered ? "発注申請を取り消しました" : "発注申請済みにしました");
+  };
+
+  return (
+    <div>
+      {/* 集計バー */}
+      <div style={{display:"flex",gap:8,marginBottom:12}}>
+        <div style={{flex:1,background:"#fff8e6",borderRadius:8,padding:"10px 12px",textAlign:"center"}}>
+          <div style={{fontSize:11,color:"#cc7700"}}>未申請</div>
+          <div style={{fontSize:20,fontWeight:700,color:"#cc7700"}}>{pendingCount}</div>
+        </div>
+        <div style={{flex:1,background:"#e8faf0",borderRadius:8,padding:"10px 12px",textAlign:"center"}}>
+          <div style={{fontSize:11,color:"#1d8348"}}>申請済み</div>
+          <div style={{fontSize:20,fontWeight:700,color:"#1d8348"}}>{orderedCount}</div>
+        </div>
+        <div style={{flex:1,background:"#f5f5f5",borderRadius:8,padding:"10px 12px",textAlign:"center"}}>
+          <div style={{fontSize:11,color:"#888"}}>合計</div>
+          <div style={{fontSize:20,fontWeight:700,color:"#1a1a1a"}}>{allRows.length}</div>
+        </div>
+      </div>
+
+      {/* 絞り込みボタン */}
+      <div style={{display:"flex",gap:8,marginBottom:12}}>
+        {[["all","すべて"],["pending","未申請"],["ordered","申請済み"]].map(([key,label])=>(
+          <button type="button" key={key}
+            style={{flex:1,padding:"7px",borderRadius:7,border:`1px solid ${filter===key?"#1a1a1a":"#eee"}`,background:filter===key?"#1a1a1a":"#fff",color:filter===key?"#fff":"#888",fontSize:12,cursor:"pointer"}}
+            onClick={()=>setFilter(key)}>{label}</button>
+        ))}
+      </div>
+
+      {/* 一覧 */}
+      {filteredRows.length===0 && <div style={{textAlign:"center",color:"#ccc",fontSize:14,padding:"32px 0"}}>該当する案件がありません</div>}
+      {filteredRows.map((row,i)=>(
+        <div key={row.orderKey} style={{background:"#fff",borderRadius:10,padding:"12px 14px",marginBottom:8,boxShadow:"0 1px 3px rgba(0,0,0,0.05)",borderLeft:`3px solid ${row.isOrdered?"#2d9e6b":"#f5d76e"}`}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:6}}>
+            <div>
+              <div style={{fontSize:12,color:"#8e8e93"}}>{row.date.slice(5).replace("-","/")}（{dayOfWeek(row.date)}）{row.koutei?`　${row.koutei}`:""}</div>
+              <div style={{fontSize:14,fontWeight:600,color:"#1a1a1a"}}>{row.bukken}</div>
+            </div>
+            <button type="button"
+              style={{padding:"5px 12px",borderRadius:6,border:`1px solid ${row.isOrdered?"#2d9e6b":"#ddd"}`,background:row.isOrdered?"#e8faf0":"#fff",color:row.isOrdered?"#1d8348":"#aaa",fontSize:11,fontWeight:row.isOrdered?600:400,cursor:"pointer",whiteSpace:"nowrap",marginLeft:8,flexShrink:0}}
+              onClick={()=>toggleOrder(row)}>
+              {row.isOrdered?"✓ 申請済み":"発注申請"}
+            </button>
+          </div>
+          <div style={{display:"flex",gap:12,alignItems:"center"}}>
+            <span style={{fontSize:11,padding:"2px 8px",borderRadius:5,background:vendorBg(row.vendor,vendors),color:vendorColor(row.vendor,vendors),fontWeight:600}}>{row.vendor}</span>
+            <span style={{fontSize:11,color:"#8e8e93"}}>{row.count}人</span>
+            {row.amount>0&&<span style={{fontSize:11,color:"#2d9e6b",fontWeight:600}}>¥{Number(row.amount).toLocaleString()}</span>}
+          </div>
+          {row.isOrdered&&row.orderedAt&&(
+            <div style={{fontSize:10,color:"#aaa",marginTop:4}}>申請日時：{new Date(row.orderedAt).toLocaleString("ja-JP")}</div>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 // ── 業務実績行コンポーネント ─────────────────────────
 function GyomuRow({ row, i, vendors, data, updateData, showToast, dayOfWeek, vendorColor }) {
   const savedAmount = (data.vendorAmounts||{})[row.reqId]?.[(row.vendor)]||"";
@@ -1047,15 +1146,21 @@ function MonthlyListView({ currentYM, setCurrentYM, requests, assignments, vendo
             lines.push("");
             lines.push(`合計 ${monthReqs.length}件　${monthReqs.reduce((s,r)=>{ const a=assignments[r.id]; if(vendorId&&a&&a[vendorId]) return s+a[vendorId]; return s+r.count; },0)}人`);
             const text = lines.join('\n');
-            if(navigator.clipboard && navigator.clipboard.writeText) {
-              navigator.clipboard.writeText(text).then(()=>alert("コピーしました！LINEワークスに貼り付けてください")).catch(()=>alert("コピーに失敗しました"));
-            } else {
+            try {
               const el = document.createElement("textarea");
-              el.value = text; el.style.position="fixed"; el.style.opacity="0";
-              document.body.appendChild(el); el.select();
+              el.value = text;
+              el.style.position = "fixed";
+              el.style.left = "0";
+              el.style.top = "0";
+              el.style.opacity = "0";
+              document.body.appendChild(el);
+              el.focus();
+              el.select();
               document.execCommand("copy");
               document.body.removeChild(el);
               alert("コピーしました！LINEワークスに貼り付けてください");
+            } catch(e) {
+              alert("コピーに失敗しました。手動でコピーしてください。");
             }
           }}>
           テキストをコピー
@@ -1162,9 +1267,9 @@ function App() {
   const [vendorSchedForm, setVendorSchedForm] = useState({title:"",member:"",note:"",date:today()});
   // 業務モード
   const [gyomuView, setGyomuView] = useState("list"); // list | settings | order
-  const [gyomuRange, setGyomuRange] = useState("week");
+  const [gyomuRange, setGyomuRange] = useState("custom");
   const [gyomuWeekOffset, setGyomuWeekOffset] = useState(0);
-  const [gyomuCustomStart, setGyomuCustomStart] = useState(addDays(today(),-7));
+  const [gyomuCustomStart, setGyomuCustomStart] = useState(addDays(today(),-7));  // 初期値：過去7日間
   const [gyomuCustomEnd, setGyomuCustomEnd] = useState(today());
   const [editingPrice, setEditingPrice] = useState({});
   const syncTimer = useRef(null);
@@ -1187,6 +1292,7 @@ function App() {
         if(!r.memberAssignments) r.memberAssignments={};
         if(!r.changeRequests) r.changeRequests=[];
         if(!r.vendorSchedules) r.vendorSchedules={};
+        if(!r.orderStatus) r.orderStatus={};
         setData(r); saveLocal(r); setSyncOk(true);
       }
     }
@@ -1608,7 +1714,7 @@ function App() {
     担当者: [{key:"calendar",label:"カレンダー",icon:"📅"},{key:"list",label:"一覧",icon:"📋"},{key:"input",label:"予定登録",icon:"＋"}],
     管理者: [{key:"calendar",label:"カレンダー",icon:"📅"},{key:"list",label:"一覧",icon:"📋"},{key:"adjust",label:"業者調整",icon:"⚙️"},{key:"vendors",label:"業者一覧",icon:"🏢"}],
     業者:   [{key:"calendar",label:"カレンダー",icon:"📅"},{key:"list",label:"一覧",icon:"📋"},{key:"members",label:"メンバー",icon:"👥"},{key:"schedules",label:"スケジュール",icon:"📌"}],
-    業務:   [{key:"list",label:"実績一覧",icon:"📋"},{key:"settings",label:"単価設定",icon:"💴"}],
+    業務:   [{key:"list",label:"実績一覧",icon:"📋"},{key:"order",label:"発注一覧",icon:"📝"},{key:"settings",label:"単価設定",icon:"💴"}],
   }[role]||[];
 
   const gyomuData = role==="業務" ? getGyomuData() : [];
@@ -2059,6 +2165,24 @@ function App() {
                 })}
               </div>
             )}
+          </div>
+        )}
+
+        {/* ── 業務モード：発注一覧 ── */}
+        {view==="order"&&role==="業務"&&(
+          <div>
+            <button type="button" style={S.refreshBtn} onClick={()=>pullFromCloud(binId)} disabled={syncing}>
+              {syncing?"取得中…":"↻ 最新データを取得"}
+            </button>
+            <OrderListView
+              data={data}
+              updateData={updateData}
+              vendors={vendors}
+              vendorColor={vendorColor}
+              vendorBg={vendorBg}
+              dayOfWeek={dayOfWeek}
+              showToast={showToast}
+            />
           </div>
         )}
 
