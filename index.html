@@ -104,8 +104,8 @@ function loadLocal() {
       }
       return parsed;
     }
-    return { requests:[], assignments:{}, vendorMembers:DEFAULT_VENDOR_MEMBERS, vendorSchedules:{}, unitPrices:{}, orders:[] };
-  } catch { return { requests:[], assignments:{}, vendorMembers:DEFAULT_VENDOR_MEMBERS, vendorSchedules:{}, unitPrices:{}, orders:[] }; }
+    return { requests:[], assignments:{}, vendorMembers:DEFAULT_VENDOR_MEMBERS, vendorSchedules:{}, unitPrices:{}, orders:[], vendorAmounts:{}, memberAssignments:{}, changeRequests:[] };
+  } catch { return { requests:[], assignments:{}, vendorMembers:DEFAULT_VENDOR_MEMBERS, vendorSchedules:{}, unitPrices:{}, orders:[], vendorAmounts:{}, memberAssignments:{}, changeRequests:[] }; }
 }
 function saveLocal(d) { localStorage.setItem(STORAGE_KEY, JSON.stringify(d)); }
 function loadVendors() {
@@ -182,13 +182,13 @@ function PinPad({ title, onSuccess, onCancel }) {
         </div>
         <div style={S.pinKeypad}>
           {["1","2","3","4","5","6","7","8","9","","0","⌫"].map((k,i)=>(
-            <button key={i} style={{...S.pinKey,...(k===""?S.pinKeyEmpty:{})}}
+            <button type="button" key={i} style={{...S.pinKey,...(k===""?S.pinKeyEmpty:{})}}
               onClick={()=>{ if(k==="⌫") handleDelete(); else if(k!=="") handleDigit(k); }}>
               {k}
             </button>
           ))}
         </div>
-        {onCancel&&<button style={S.pinCancel} onClick={onCancel}>キャンセル</button>}
+        {onCancel&&<button type="button" style={S.pinCancel} onClick={onCancel}>キャンセル</button>}
       </div>
     </div>
   );
@@ -228,13 +228,13 @@ function PinPadVendor({ vendorName, correctPass, onSuccess, onCancel }) {
         </div>
         <div style={S.pinKeypad}>
           {["1","2","3","4","5","6","7","8","9","","0","⌫"].map((k,i)=>(
-            <button key={i} style={{...S.pinKey,...(k===""?S.pinKeyEmpty:{})}}
+            <button type="button" key={i} style={{...S.pinKey,...(k===""?S.pinKeyEmpty:{})}}
               onClick={()=>{ if(k==="⌫") handleDelete(); else if(k!=="") handleDigit(k); }}>
               {k}
             </button>
           ))}
         </div>
-        <button style={S.pinCancel} onClick={onCancel}>戻る</button>
+        <button type="button" style={S.pinCancel} onClick={onCancel}>戻る</button>
       </div>
     </div>
   );
@@ -254,7 +254,7 @@ function VendorPassSetting({ vendorName, currentPass, onSave }) {
       {!editing ? (
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
           <span style={{fontSize:11,color:"#8e8e93"}}>🔐 パスワード：{"●".repeat(currentPass.length)}</span>
-          <button style={{fontSize:11,color:"#007aff",background:"none",border:"none",cursor:"pointer",padding:"2px 6px"}} onClick={()=>setEditing(true)}>変更</button>
+          <button type="button" style={{fontSize:11,color:"#007aff",background:"none",border:"none",cursor:"pointer",padding:"2px 6px"}} onClick={()=>setEditing(true)}>変更</button>
         </div>
       ) : (
         <div>
@@ -262,8 +262,8 @@ function VendorPassSetting({ vendorName, currentPass, onSave }) {
             <input style={{...S.formInput,flex:1,fontSize:14,letterSpacing:4}} type="number" maxLength={4}
               value={newPass} onChange={e=>{ setNewPass(e.target.value.slice(0,4)); setErr(""); }}
               placeholder="新しいPIN（4桁）"/>
-            <button style={S.btnPrimary} onClick={handleSave}>保存</button>
-            <button style={S.btnGhost} onClick={()=>{ setEditing(false); setNewPass(""); setErr(""); }}>×</button>
+            <button type="button" style={S.btnPrimary} onClick={handleSave}>保存</button>
+            <button type="button" style={S.btnGhost} onClick={()=>{ setEditing(false); setNewPass(""); setErr(""); }}>×</button>
           </div>
           {err&&<div style={{fontSize:11,color:"#ff3b30",marginTop:4}}>{err}</div>}
         </div>
@@ -290,7 +290,7 @@ function VendorAmountInput({ r, vendorId, onSaveAmount }) {
           <span style={{fontSize:12,color:"#8e8e93"}}>
             {amount ? `請求金額：¥${Number(amount).toLocaleString()}` : "請求金額：未入力"}
           </span>
-          <button style={{fontSize:11,color:"#1a1a1a",background:"none",border:"1px solid #ddd",borderRadius:4,padding:"3px 8px",cursor:"pointer"}}
+          <button type="button" style={{fontSize:11,color:"#1a1a1a",background:"none",border:"1px solid #ddd",borderRadius:4,padding:"3px 8px",cursor:"pointer"}}
             onClick={()=>setEditing(true)}>入力</button>
         </div>
       ) : (
@@ -299,11 +299,11 @@ function VendorAmountInput({ r, vendorId, onSaveAmount }) {
           <div style={{display:"flex",gap:8}}>
             <input type="number" style={{...S.formInput,flex:1,fontSize:14}} value={amount}
               onChange={e=>setAmount(e.target.value)} placeholder="例：150000"/>
-            <button style={{...S.btnPrimary,padding:"6px 12px",fontSize:13}} onClick={()=>{
+            <button type="button" style={{...S.btnPrimary,padding:"6px 12px",fontSize:13}} onClick={()=>{
               onSaveAmount(r.id, vendorId, amount);
               setEditing(false);
             }}>保存</button>
-            <button style={{...S.btnGhost,padding:"6px 10px",fontSize:13}} onClick={()=>setEditing(false)}>×</button>
+            <button type="button" style={{...S.btnGhost,padding:"6px 10px",fontSize:13}} onClick={()=>setEditing(false)}>×</button>
           </div>
         </div>
       )}
@@ -340,7 +340,7 @@ function VendorReqCard({ r, a, vendorId, vendors, vendorMembers, initialSelected
           {r.rekkaa&&<div style={{fontSize:12,color:"#8e8e93",marginTop:2}}>レッカー：{r.rekkaa}</div>}
           {r.note&&<div style={{fontSize:12,color:"#8e8e93",marginTop:2}}>備考：{r.note}</div>}
         </div>
-        <button style={{background:"#fff0f0",border:"none",fontSize:12,color:"#ff3b30",cursor:"pointer",borderRadius:6,width:26,height:26,display:"flex",alignItems:"center",justifyContent:"center"}} onClick={onDelete}>✕</button>
+        <button type="button" style={{background:"#fff0f0",border:"none",fontSize:12,color:"#ff3b30",cursor:"pointer",borderRadius:6,width:26,height:26,display:"flex",alignItems:"center",justifyContent:"center"}} onClick={onDelete}>✕</button>
       </div>
 
       {/* 案内図 */}
@@ -353,7 +353,7 @@ function VendorReqCard({ r, a, vendorId, vendors, vendorMembers, initialSelected
           <input type="number"
             style={{flex:1,minWidth:0,padding:"8px 8px",borderRadius:7,border:"1px solid #ddd",fontSize:14,fontFamily:"inherit",background:"#fafafa",boxSizing:"border-box"}}
             value={amount} onChange={e=>setAmount(e.target.value)} placeholder="金額を入力"/>
-          <button style={{padding:"8px 10px",background:"#1a1a1a",color:"#fff",border:"none",borderRadius:7,fontSize:12,cursor:"pointer",whiteSpace:"nowrap",flexShrink:0}}
+          <button type="button" style={{padding:"8px 10px",background:"#1a1a1a",color:"#fff",border:"none",borderRadius:7,fontSize:12,cursor:"pointer",whiteSpace:"nowrap",flexShrink:0}}
             onClick={()=>{ onSaveAmount&&onSaveAmount(r.id,vendorId,amount); }}>保存</button>
         </div>
         {amount&&<div style={{fontSize:12,color:"#2d9e6b",marginTop:4,fontWeight:600}}>¥{Number(amount).toLocaleString()}</div>}
@@ -371,11 +371,11 @@ function VendorReqCard({ r, a, vendorId, vendors, vendorMembers, initialSelected
                     <span key={m} style={{fontSize:12,padding:"3px 10px",borderRadius:6,background:"#eef3fc",color:"#3b6fd4",fontWeight:600}}>{m}</span>
                   ))}
                 </div>
-                <button style={{fontSize:11,padding:"5px 10px",background:"#f2f2f7",border:"none",borderRadius:5,cursor:"pointer",color:"#1a1a1a"}}
+                <button type="button" style={{fontSize:11,padding:"5px 10px",background:"#f2f2f7",border:"none",borderRadius:5,cursor:"pointer",color:"#1a1a1a"}}
                   onClick={()=>setEditingMember(true)}>✏️ メンバーを変更</button>
               </div>
             ) : (
-              <button style={{fontSize:13,padding:"7px 14px",background:"#f2f2f7",border:"none",borderRadius:7,cursor:"pointer",color:"#1a1a1a",width:"100%"}}
+              <button type="button" style={{fontSize:13,padding:"7px 14px",background:"#f2f2f7",border:"none",borderRadius:7,cursor:"pointer",color:"#1a1a1a",width:"100%"}}
                 onClick={()=>setEditingMember(true)}>👤 メンバーを割り当てる</button>
             )}
           </div>
@@ -397,9 +397,9 @@ function VendorReqCard({ r, a, vendorId, vendors, vendorMembers, initialSelected
             </div>
             {selected.length>0&&<div style={{fontSize:11,color:"#1a1a1a",marginBottom:8,fontWeight:600}}>選択中（{selected.length}名）：{selected.join("、")}</div>}
             <div style={{display:"flex",gap:8}}>
-              <button style={{padding:"8px 16px",background:"#1a1a1a",color:"#fff",border:"none",borderRadius:7,fontSize:13,cursor:"pointer"}}
+              <button type="button" style={{padding:"8px 16px",background:"#1a1a1a",color:"#fff",border:"none",borderRadius:7,fontSize:13,cursor:"pointer"}}
                 onClick={()=>{ onSaveMember(r.id,selected); setEditingMember(false); }}>確定</button>
-              <button style={{padding:"8px 12px",background:"#f5f5f5",color:"#888",border:"none",borderRadius:7,fontSize:13,cursor:"pointer"}}
+              <button type="button" style={{padding:"8px 12px",background:"#f5f5f5",color:"#888",border:"none",borderRadius:7,fontSize:13,cursor:"pointer"}}
                 onClick={()=>setEditingMember(false)}>キャンセル</button>
             </div>
           </div>
@@ -436,7 +436,7 @@ function MemberAssignCard({ r, a, vendorId, vendors, vendorMembers, onDelete, on
           <div style={S.reqMeta}>👷 {a[vendorId]}人{r.tsubo?`　${r.tsubo}`:""}{r.floors?`　${r.floors}階`:""}</div>
           {r.note&&<div style={S.reqNote}>{r.note}</div>}
         </div>
-        <button style={S.delBtn} onClick={onDelete}>✕</button>
+        <button type="button" style={S.delBtn} onClick={onDelete}>✕</button>
       </div>
 
       {/* 割当済みメンバー表示 */}
@@ -452,10 +452,10 @@ function MemberAssignCard({ r, a, vendorId, vendors, vendorMembers, onDelete, on
                   </span>
                 ))}
               </div>
-              <button style={{...S.btnAssign,fontSize:11}} onClick={()=>setEditing(true)}>✏️ メンバーを変更</button>
+              <button type="button" style={{...S.btnAssign,fontSize:11}} onClick={()=>setEditing(true)}>✏️ メンバーを変更</button>
             </div>
           ) : (
-            <button style={S.btnAssign} onClick={()=>{ setEditing(true); setSelected([]); }}>
+            <button type="button" style={S.btnAssign} onClick={()=>{ setEditing(true); setSelected([]); }}>
               👤 メンバーを割り当てる
             </button>
           )}
@@ -491,8 +491,8 @@ function MemberAssignCard({ r, a, vendorId, vendors, vendorMembers, onDelete, on
             </div>
           )}
           <div style={{display:"flex",gap:8}}>
-            <button style={S.btnPrimary} onClick={()=>{ onSave(r.id,selected); setEditing(false); }}>確定</button>
-            <button style={S.btnGhost} onClick={()=>{ setEditing(false); }}>キャンセル</button>
+            <button type="button" style={S.btnPrimary} onClick={()=>{ onSave(r.id,selected); setEditing(false); }}>確定</button>
+            <button type="button" style={S.btnGhost} onClick={()=>{ setEditing(false); }}>キャンセル</button>
           </div>
         </div>
       )}
@@ -516,9 +516,9 @@ function CalendarView({ currentYM, setCurrentYM, requestsByDate, assignments, ve
   return (
     <div>
       <div style={S.calNav}>
-        <button style={S.calNavBtn} onClick={prevM}>‹</button>
+        <button type="button" style={S.calNavBtn} onClick={prevM}>‹</button>
         <span style={S.calNavTitle}>{currentYM.replace("-","年")}月</span>
-        <button style={S.calNavBtn} onClick={nextM}>›</button>
+        <button type="button" style={S.calNavBtn} onClick={nextM}>›</button>
       </div>
       <div style={S.calGrid}>
         {["日","月","火","水","木","金","土"].map(d=>(
@@ -535,7 +535,7 @@ function CalendarView({ currentYM, setCurrentYM, requestsByDate, assignments, ve
           // 業者モードでは開示済みのみ表示
           const visibleReqs = vendorId ? reqs.filter(r=>{ const a=assignments[r.id]; return a&&a[vendorId]; }) : reqs;
           return (
-            <button key={ds}
+            <button type="button" key={ds}
               style={{...S.calCell,...(isT?S.calCellToday:{}),...(isSel?S.calCellSel:{}),...(past&&!isT?S.calCellPast:{}),...(highlightDates&&highlightDates.includes(ds)?S.calCellHighlight:{})}}
               onClick={()=>{ setSelDate(isSel?null:ds); if(onDayTap) onDayTap(ds, visibleReqs.length===0); }}>
               <span style={{...S.calNum, background:isT?"#1a1a1a":"transparent",
@@ -566,10 +566,10 @@ function CalendarView({ currentYM, setCurrentYM, requestsByDate, assignments, ve
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10,paddingBottom:8,borderBottom:"0.5px solid #f2f2f7"}}>
             <div style={S.detailTitle}>{selDate}（{dayOfWeek(selDate)}）</div>
             {vendorId&&!isPast(selDate)&&(
-              <button style={S.addDayBtn} onClick={()=>onAddSchedule&&onAddSchedule(selDate)}>＋ 予定追加</button>
+              <button type="button" style={S.addDayBtn} onClick={()=>onAddSchedule&&onAddSchedule(selDate)}>＋ 予定追加</button>
             )}
             {role==="担当者"&&!isPast(selDate)&&!vendorId&&(
-              <button style={S.addDayBtn} onClick={()=>onDayTap&&onDayTap(selDate,true)}>＋ 追加</button>
+              <button type="button" style={S.addDayBtn} onClick={()=>onDayTap&&onDayTap(selDate,true)}>＋ 追加</button>
             )}
           </div>
 
@@ -599,7 +599,7 @@ function CalendarView({ currentYM, setCurrentYM, requestsByDate, assignments, ve
                   {s.member&&<div style={S.reqMeta}>👤 {s.member}</div>}
                   {s.note&&<div style={S.reqNote}>{s.note}</div>}
                 </div>
-                <button style={S.delBtn} onClick={()=>onDeleteSchedule&&onDeleteSchedule(vendorId,s.id)}>✕</button>
+                <button type="button" style={S.delBtn} onClick={()=>onDeleteSchedule&&onDeleteSchedule(vendorId,s.id)}>✕</button>
               </div>
             </div>
           ))}
@@ -626,7 +626,7 @@ function CalendarView({ currentYM, setCurrentYM, requestsByDate, assignments, ve
                     )) : <span style={S.pill}>未割当</span>}
                     {r.disclosed&&<span style={S.disclosedChip}>開示済</span>}
                   </div>
-                  {(role==="担当者"||role==="管理者"||role==="業者")&&<button style={S.delBtn} onClick={()=>onDeleteRequest&&onDeleteRequest(r.id)}>✕</button>}
+                  {(role==="担当者"||role==="管理者"||role==="業者")&&<button type="button" style={S.delBtn} onClick={()=>onDeleteRequest&&onDeleteRequest(r.id)}>✕</button>}
                 </div>
                 {role==="管理者"&&renderSplitUI&&renderSplitUI(r)}
                 {role==="管理者"&&renderDiscloseBtn&&renderDiscloseBtn(r)}
@@ -647,7 +647,7 @@ function CalendarView({ currentYM, setCurrentYM, requestsByDate, assignments, ve
                   );
                 })}
                 {onEditRequest&&(
-                  <button style={S.btnAssign} onClick={()=>onEditRequest(r)}>✏️ 編集</button>
+                  <button type="button" style={S.btnAssign} onClick={()=>onEditRequest(r)}>✏️ 編集</button>
                 )}
               </div>
             );
@@ -710,7 +710,7 @@ function RegisterForm({ initialDate, vendors, names, onSave, onCancel, syncing }
     <div style={S.formCard}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
         <div style={S.formTitle}>予定を登録</div>
-        {onCancel&&<button style={S.closeBtn} onClick={onCancel}>✕</button>}
+        {onCancel&&<button type="button" style={S.closeBtn} onClick={onCancel}>✕</button>}
       </div>
       <div style={S.formRow}>
         <label style={S.formLabel}>担当者名 <span style={{color:"#ff3b30"}}>*</span></label>
@@ -786,7 +786,7 @@ function RegisterForm({ initialDate, vendors, names, onSave, onCancel, syncing }
       </div>
       <AnnaizuUploader annaizu={form.annaizu} onSelect={b64=>setForm(f=>({...f,annaizu:b64}))} onClear={()=>setForm(f=>({...f,annaizu:""}))} label="案内図１（PNG/JPG）"/>
       <AnnaizuUploader annaizu={form.annaizu2} onSelect={b64=>setForm(f=>({...f,annaizu2:b64}))} onClear={()=>setForm(f=>({...f,annaizu2:""}))} label="案内図２（PNG/JPG）"/>
-      <button style={{...S.btnPrimary,width:"100%",marginTop:16,padding:"14px",fontSize:16,opacity:syncing?0.6:1}} onClick={handleSave} disabled={syncing}>
+      <button type="button" style={{...S.btnPrimary,width:"100%",marginTop:16,padding:"14px",fontSize:16,opacity:syncing?0.6:1}} onClick={handleSave} disabled={syncing}>
         {syncing?"保存中…":"登録する"}
       </button>
     </div>
@@ -835,14 +835,14 @@ function AnnaizuUploader({ annaizu, onSelect, onClear, label }) {
         <div>
           <img src={annaizu} style={{maxWidth:"100%",maxHeight:200,borderRadius:8,marginBottom:8,border:"1px solid #eee",display:"block"}}/>
           <div style={{display:"flex",gap:8}}>
-            <button style={{fontSize:12,padding:"6px 12px",background:"#f5f5f5",border:"none",borderRadius:6,cursor:"pointer",color:"#888"}}
+            <button type="button" style={{fontSize:12,padding:"6px 12px",background:"#f5f5f5",border:"none",borderRadius:6,cursor:"pointer",color:"#888"}}
               onClick={()=>inputRef.current&&inputRef.current.click()}>変更</button>
-            <button style={{fontSize:12,padding:"6px 12px",background:"#fff0f0",border:"none",borderRadius:6,cursor:"pointer",color:"#ff3b30"}}
+            <button type="button" style={{fontSize:12,padding:"6px 12px",background:"#fff0f0",border:"none",borderRadius:6,cursor:"pointer",color:"#ff3b30"}}
               onClick={onClear}>削除</button>
           </div>
         </div>
       ) : (
-        <button style={{width:"100%",padding:"16px",border:"1.5px dashed #ddd",borderRadius:8,background:"#fafafa",cursor:"pointer",fontSize:13,color:"#888",display:"block",textAlign:"center"}}
+        <button type="button" style={{width:"100%",padding:"16px",border:"1.5px dashed #ddd",borderRadius:8,background:"#fafafa",cursor:"pointer",fontSize:13,color:"#888",display:"block",textAlign:"center"}}
           onClick={()=>inputRef.current&&inputRef.current.click()}>
           ＋ 画像を選択
         </button>
@@ -878,7 +878,7 @@ function EditForm({ request, vendors, names, onSave, onCancel, syncing }) {
     <div style={S.formCard}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
         <div style={S.formTitle}>予定を編集</div>
-        <button style={S.closeBtn} onClick={onCancel}>✕</button>
+        <button type="button" style={S.closeBtn} onClick={onCancel}>✕</button>
       </div>
       <div style={S.formRow}>
         <label style={S.formLabel}>担当者名 *</label>
@@ -916,7 +916,7 @@ function EditForm({ request, vendors, names, onSave, onCancel, syncing }) {
         <label style={S.formLabel}>備考</label>
         <input style={S.formInput} value={form.note} onChange={e=>setForm(f=>({...f,note:e.target.value}))} placeholder="メモ"/>
       </div>
-      <button style={{...S.btnPrimary,width:"100%",marginTop:16,padding:"14px",fontSize:16,opacity:syncing?0.6:1}}
+      <button type="button" style={{...S.btnPrimary,width:"100%",marginTop:16,padding:"14px",fontSize:16,opacity:syncing?0.6:1}}
         onClick={handleSave} disabled={syncing}>
         {syncing?"保存中…":"更新する"}
       </button>
@@ -955,7 +955,7 @@ function GyomuRow({ row, i, vendors, data, updateData, showToast, dayOfWeek, ven
         <span style={{fontSize:11,color:"#8e8e93",whiteSpace:"nowrap"}}>金額：</span>
         <input type="number" style={{flex:1,padding:"6px 8px",borderRadius:6,border:"1px solid #ddd",fontSize:14,fontFamily:"inherit"}}
           value={amount} onChange={e=>setAmount(e.target.value)} placeholder="金額を入力"/>
-        <button style={{padding:"6px 12px",background:"#1a1a1a",color:"#fff",border:"none",borderRadius:6,fontSize:12,cursor:"pointer",whiteSpace:"nowrap"}}
+        <button type="button" style={{padding:"6px 12px",background:"#1a1a1a",color:"#fff",border:"none",borderRadius:6,fontSize:12,cursor:"pointer",whiteSpace:"nowrap"}}
           onClick={handleSave}>保存</button>
         {amount&&<span style={{fontSize:12,color:"#2d9e6b",fontWeight:600,whiteSpace:"nowrap"}}>¥{Number(amount).toLocaleString()}</span>}
       </div>
@@ -1023,10 +1023,12 @@ function App() {
     try {
       const r=await fetchBin(id);
       if(r&&r.requests){
-        // vendorMembersが空なら初期値で補完
-        if(!r.vendorMembers||Object.keys(r.vendorMembers).length===0){
-          r.vendorMembers=DEFAULT_VENDOR_MEMBERS;
-        }
+        // 不足フィールドを補完
+        if(!r.vendorMembers||Object.keys(r.vendorMembers).length===0) r.vendorMembers=DEFAULT_VENDOR_MEMBERS;
+        if(!r.vendorAmounts) r.vendorAmounts={};
+        if(!r.memberAssignments) r.memberAssignments={};
+        if(!r.changeRequests) r.changeRequests=[];
+        if(!r.vendorSchedules) r.vendorSchedules={};
         setData(r); saveLocal(r); setSyncOk(true);
       }
     }
@@ -1265,12 +1267,12 @@ function App() {
           </div>
         ))}
         <div style={{display:"flex",gap:8,marginTop:10}}>
-          <button style={S.btnPrimary} onClick={()=>confirmSplit(r.id,r.count)}>確定</button>
-          <button style={S.btnGhost} onClick={()=>setSplitInputs(p=>({...p,[r.id]:undefined}))}>キャンセル</button>
+          <button type="button" style={S.btnPrimary} onClick={()=>confirmSplit(r.id,r.count)}>確定</button>
+          <button type="button" style={S.btnGhost} onClick={()=>setSplitInputs(p=>({...p,[r.id]:undefined}))}>キャンセル</button>
         </div>
       </div>
     ):(
-      <button style={S.btnAssign} onClick={start}>
+      <button type="button" style={S.btnAssign} onClick={start}>
         {Object.keys(asgn).length>0?"✏️ 割当を変更":"＋ 業者を割り当てる"}
       </button>
     );
@@ -1323,7 +1325,7 @@ function App() {
             {key:"業者",icon:"VD",desc:"スケジュール確認・入力",pin:false},
             {key:"業務",icon:"OP",desc:"発注処理・実績管理（要パスワード）",pin:true,style:S.roleCardGyomu},
           ].map(r=>(
-            <button key={r.key} style={{...S.roleCard,...(r.style||{})}}
+            <button type="button" key={r.key} style={{...S.roleCard,...(r.style||{})}}
               onClick={()=>{ if(r.pin){setShowPin(r.key);}else if(r.key==="業者"){setRole("業者");}else{setRole(r.key);setView("calendar");} }}>
               <div style={{width:38,height:38,borderRadius:8,background:"#1a1a1a",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
                 <span style={{fontFamily:"'Inter',sans-serif",fontSize:10,fontWeight:300,color:"#fff",letterSpacing:3}}>{r.icon}</span>
@@ -1346,7 +1348,7 @@ function App() {
         <div style={S.splashSub}>どちらの業者ですか？</div>
         <div style={S.roleSection}>
           {vendors.map(v=>(
-            <button key={v} style={{...S.roleCard,borderLeft:`4px solid ${vendorColor(v,vendors)}`}}
+            <button type="button" key={v} style={{...S.roleCard,borderLeft:`4px solid ${vendorColor(v,vendors)}`}}
               onClick={()=>{ setVendorPendingId(v); }}>
               <div style={{width:36,height:36,borderRadius:8,background:"#1c1c1e",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
                 <span style={{fontFamily:"'Montserrat',sans-serif",fontSize:10,fontWeight:800,color:"#fff",letterSpacing:1}}>VD</span>
@@ -1356,7 +1358,7 @@ function App() {
             </button>
           ))}
         </div>
-        <button style={{...S.btnGhost,marginTop:16,width:"100%"}} onClick={()=>setRole(null)}>戻る</button>
+        <button type="button" style={{...S.btnGhost,marginTop:16,width:"100%"}} onClick={()=>setRole(null)}>戻る</button>
       </div>
     </div>
   );
@@ -1378,7 +1380,7 @@ function App() {
     <div style={S.root}>
       <div style={S.header}>
         <div><div style={S.headerTitle}>スケジュール追加</div><div style={S.headerSub}>{vendorId}</div></div>
-        <button style={S.headerBtn} onClick={()=>setShowVendorSchedForm(null)}>キャンセル</button>
+        <button type="button" style={S.headerBtn} onClick={()=>setShowVendorSchedForm(null)}>キャンセル</button>
       </div>
       <main style={S.main}>
         <div style={S.formCard}>
@@ -1401,7 +1403,7 @@ function App() {
             <label style={S.formLabel}>備考</label>
             <input style={S.formInput} value={vendorSchedForm.note} onChange={e=>setVendorSchedForm(f=>({...f,note:e.target.value}))} placeholder="メモ"/>
           </div>
-          <button style={{...S.btnPrimary,width:"100%",marginTop:16,padding:"14px"}} onClick={async()=>{
+          <button type="button" style={{...S.btnPrimary,width:"100%",marginTop:16,padding:"14px"}} onClick={async()=>{
             if(!vendorSchedForm.title||!vendorSchedForm.date){showToast("タイトルと日付は必須です","err");return;}
             await addVendorSchedule(vendorId,vendorSchedForm);
             setVendorSchedForm({title:"",member:"",note:"",date:today()});
@@ -1489,13 +1491,13 @@ function App() {
               </div>
             );
           })()}
-          <button style={S.headerBtn} onClick={()=>{ setRole(null); setVendorId(null); setView("calendar"); }}>切替</button>
+          <button type="button" style={S.headerBtn} onClick={()=>{ setRole(null); setVendorId(null); setView("calendar"); }}>切替</button>
         </div>
       </div>
 
       <div style={S.tabBar}>
         {navItems.map(n=>(
-          <button key={n.key} style={{...S.tab,...(view===n.key?S.tabActive:{})}}
+          <button type="button" key={n.key} style={{...S.tab,...(view===n.key?S.tabActive:{})}}
             onClick={()=>setView(n.key)}>
             <span style={{fontSize:14,fontWeight:700,letterSpacing:"0.05em"}}>{n.label}</span>
 
@@ -1508,7 +1510,7 @@ function App() {
         {/* ── カレンダー（担当者・管理者・業者） ── */}
         {view==="calendar"&&role!=="業務"&&(
           <div>
-            <button style={S.refreshBtn} onClick={()=>pullFromCloud(binId)} disabled={syncing}>
+            <button type="button" style={S.refreshBtn} onClick={()=>pullFromCloud(binId)} disabled={syncing}>
               {syncing?"取得中…":"↻ 最新データを取得"}
             </button>
             <CalendarView
@@ -1551,7 +1553,7 @@ function App() {
               renderDiscloseBtn={role==="管理者"?((r)=>{
                 const asgn=data.assignments[r.id];
                 if(!asgn) return (
-                  <button style={S.discloseBtnOff} disabled>未割当</button>
+                  <button type="button" style={S.discloseBtnOff} disabled>未割当</button>
                 );
                 return (
                   <div>
@@ -1581,7 +1583,7 @@ function App() {
                         </div>
                       );
                     })}
-                    <button style={r.disclosed?S.discloseBtnOn:S.discloseBtnOff} onClick={()=>toggleDisclose(r.id)}>
+                    <button type="button" style={r.disclosed?S.discloseBtnOn:S.discloseBtnOff} onClick={()=>toggleDisclose(r.id)}>
                       {r.disclosed?"開示済 ✓":"開示する"}
                     </button>
                   </div>
@@ -1599,7 +1601,7 @@ function App() {
         {/* ── 業者調整 ── */}
         {view==="adjust"&&role==="管理者"&&(
           <div>
-            <button style={S.refreshBtn} onClick={()=>pullFromCloud(binId)} disabled={syncing}>
+            <button type="button" style={S.refreshBtn} onClick={()=>pullFromCloud(binId)} disabled={syncing}>
               {syncing?"取得中…":"↻ 最新データを取得"}
             </button>
 
@@ -1615,7 +1617,7 @@ function App() {
                       人数変更申請：{cr.originalCount}人 → {cr.newCount}人
                     </div>
                     <div style={{display:"flex",gap:8,marginTop:8}}>
-                      <button style={{...S.btnPrimary,padding:"6px 16px",fontSize:13}} onClick={async()=>{
+                      <button type="button" style={{...S.btnPrimary,padding:"6px 16px",fontSize:13}} onClick={async()=>{
                         // 承認：リクエストの内容でrequestsを更新し、割当をリセット
                         const updatedReqs = data.requests.map(r =>
                           r.id===cr.reqId ? {...r, ...cr.newData} : r
@@ -1628,7 +1630,7 @@ function App() {
                         await updateData({...data, requests:updatedReqs, assignments:updatedAssigns, changeRequests:updatedCRs});
                         showToast("承認しました。再割当してください。");
                       }}>✓ 承認</button>
-                      <button style={{...S.btnGhost,padding:"6px 14px",fontSize:13,color:"#ff3b30"}} onClick={async()=>{
+                      <button type="button" style={{...S.btnGhost,padding:"6px 14px",fontSize:13,color:"#ff3b30"}} onClick={async()=>{
                         const updatedCRs = (data.changeRequests||[]).map(c =>
                           c.id===cr.id ? {...c, status:"rejected"} : c
                         );
@@ -1656,8 +1658,8 @@ function App() {
                     {r.note&&<div style={S.reqNote}>{r.note}</div>}
                   </div>
                   <div style={{display:"flex",gap:4}}>
-                    <button style={S.editSmBtn} onClick={()=>setEditingRequest(r)}>✏️</button>
-                    <button style={S.delBtn} onClick={()=>deleteRequest(r.id)}>✕</button>
+                    <button type="button" style={S.editSmBtn} onClick={()=>setEditingRequest(r)}>✏️</button>
+                    <button type="button" style={S.delBtn} onClick={()=>deleteRequest(r.id)}>✕</button>
                   </div>
                 </div>
                 <SplitUI r={r}/>
@@ -1693,14 +1695,14 @@ function App() {
                           </div>
                         ):null;
                       })}
-                      <button style={r.disclosed?S.discloseBtnOn:S.discloseBtnOff} onClick={()=>toggleDisclose(r.id)}>
+                      <button type="button" style={r.disclosed?S.discloseBtnOn:S.discloseBtnOff} onClick={()=>toggleDisclose(r.id)}>
                         {r.disclosed?"開示済 ✓":"開示する"}
                       </button>
                     </div>
                     <div style={{display:"flex",flexDirection:"column",gap:6,marginLeft:8}}>
-                      <button style={S.editSmBtn} onClick={()=>setEditingRequest(r)}>✏️</button>
-                      <button style={S.delBtn} onClick={()=>deleteRequest(r.id)}>✕</button>
-                      <button style={S.undoBtn} onClick={()=>clearAssignment(r.id)}>↩</button>
+                      <button type="button" style={S.editSmBtn} onClick={()=>setEditingRequest(r)}>✏️</button>
+                      <button type="button" style={S.delBtn} onClick={()=>deleteRequest(r.id)}>✕</button>
+                      <button type="button" style={S.undoBtn} onClick={()=>clearAssignment(r.id)}>↩</button>
                     </div>
                   </div>
                   <SplitUI r={r}/>
@@ -1715,7 +1717,7 @@ function App() {
           <div>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
               <div style={S.sectionLabel}>荷揚げ業者一覧</div>
-              <button style={vendorEditMode?S.editModeOnBtn:S.editModeOffBtn} onClick={()=>setVendorEditMode(!vendorEditMode)}>
+              <button type="button" style={vendorEditMode?S.editModeOnBtn:S.editModeOffBtn} onClick={()=>setVendorEditMode(!vendorEditMode)}>
                 {vendorEditMode?"完了":"✏️ 編集"}
               </button>
             </div>
@@ -1725,16 +1727,16 @@ function App() {
                 {vendors.map((v,idx)=>(
                   <div key={v} style={S.vendorEditRow}>
                     <div style={{display:"flex",gap:4}}>
-                      <button style={S.orderBtn} onClick={()=>moveVendor(idx,-1)} disabled={idx===0}>↑</button>
-                      <button style={S.orderBtn} onClick={()=>moveVendor(idx,1)} disabled={idx===vendors.length-1}>↓</button>
+                      <button type="button" style={S.orderBtn} onClick={()=>moveVendor(idx,-1)} disabled={idx===0}>↑</button>
+                      <button type="button" style={S.orderBtn} onClick={()=>moveVendor(idx,1)} disabled={idx===vendors.length-1}>↓</button>
                     </div>
                     <span style={{...S.pill,background:vendorBg(v,vendors),color:vendorColor(v,vendors),fontWeight:600,flex:1}}>{v}</span>
-                    <button style={S.delBtn} onClick={()=>deleteVendor(v)}>✕</button>
+                    <button type="button" style={S.delBtn} onClick={()=>deleteVendor(v)}>✕</button>
                   </div>
                 ))}
                 <div style={{display:"flex",gap:8,marginTop:12}}>
                   <input style={{...S.formInput,flex:1}} value={newVendorName} onChange={e=>setNewVendorName(e.target.value)} placeholder="新しい業者名"/>
-                  <button style={S.btnPrimary} onClick={addVendor}>追加</button>
+                  <button type="button" style={S.btnPrimary} onClick={addVendor}>追加</button>
                 </div>
               </div>
             )}
@@ -1789,7 +1791,7 @@ function App() {
           <div>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
               <div style={S.sectionLabel}>自社スケジュール</div>
-              <button style={S.addDayBtn} onClick={()=>{ setVendorSchedForm({title:"",member:"",note:"",date:today()}); setShowVendorSchedForm("list"); }}>＋ 追加</button>
+              <button type="button" style={S.addDayBtn} onClick={()=>{ setVendorSchedForm({title:"",member:"",note:"",date:today()}); setShowVendorSchedForm("list"); }}>＋ 追加</button>
             </div>
             {(data.vendorSchedules[vendorId]||[]).sort((a,b)=>a.date.localeCompare(b.date)).map(s=>(
               <div key={s.id} style={{...S.reqCard,borderLeftColor:"#ff9500"}}>
@@ -1800,7 +1802,7 @@ function App() {
                     {s.member&&<div style={S.reqMeta}>👤 {s.member}</div>}
                     {s.note&&<div style={S.reqNote}>{s.note}</div>}
                   </div>
-                  <button style={S.delBtn} onClick={()=>deleteVendorSchedule(vendorId,s.id)}>✕</button>
+                  <button type="button" style={S.delBtn} onClick={()=>deleteVendorSchedule(vendorId,s.id)}>✕</button>
                 </div>
               </div>
             ))}
@@ -1811,21 +1813,21 @@ function App() {
         {/* ── 業務モード：実績一覧 ── */}
         {view==="list"&&role==="業務"&&(
           <div>
-            <button style={S.refreshBtn} onClick={()=>pullFromCloud(binId)} disabled={syncing}>
+            <button type="button" style={S.refreshBtn} onClick={()=>pullFromCloud(binId)} disabled={syncing}>
               {syncing?"取得中…":"↻ 最新データを取得"}
             </button>
             {/* 期間選択 */}
             <div style={S.gyomuRangeBar}>
-              <button style={{...S.rangeBtn,...(gyomuRange==="week"?S.rangeBtnActive:{})}} onClick={()=>setGyomuRange("week")}>週単位</button>
-              <button style={{...S.rangeBtn,...(gyomuRange==="custom"?S.rangeBtnActive:{})}} onClick={()=>setGyomuRange("custom")}>期間指定</button>
+              <button type="button" style={{...S.rangeBtn,...(gyomuRange==="week"?S.rangeBtnActive:{})}} onClick={()=>setGyomuRange("week")}>週単位</button>
+              <button type="button" style={{...S.rangeBtn,...(gyomuRange==="custom"?S.rangeBtnActive:{})}} onClick={()=>setGyomuRange("custom")}>期間指定</button>
             </div>
             {gyomuRange==="week"&&(
               <div style={S.weekNav}>
-                <button style={S.calNavBtn} onClick={()=>setGyomuWeekOffset(o=>o-1)}>‹</button>
+                <button type="button" style={S.calNavBtn} onClick={()=>setGyomuWeekOffset(o=>o-1)}>‹</button>
                 <span style={{fontSize:13,fontWeight:600,color:"#1c1c1e"}}>
                   {getWeekRange(gyomuWeekOffset).start} 〜 {getWeekRange(gyomuWeekOffset).end}
                 </span>
-                <button style={S.calNavBtn} onClick={()=>setGyomuWeekOffset(o=>o+1)}>›</button>
+                <button type="button" style={S.calNavBtn} onClick={()=>setGyomuWeekOffset(o=>o+1)}>›</button>
               </div>
             )}
             {gyomuRange==="custom"&&(
@@ -1897,7 +1899,7 @@ function App() {
                 <div key={v} style={{...S.vendorCard,borderTopColor:vendorColor(v,vendors)}}>
                   <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
                     <div style={{...S.vendorName,color:vendorColor(v,vendors)}}>{v}</div>
-                    <button style={isOpen?S.editModeOnBtn:S.editModeOffBtn} onClick={()=>{ setSelectedCatVendor(isOpen?null:v); setEditingCatIdx(null); setNewCatName(""); }}>
+                    <button type="button" style={isOpen?S.editModeOnBtn:S.editModeOffBtn} onClick={()=>{ setSelectedCatVendor(isOpen?null:v); setEditingCatIdx(null); setNewCatName(""); }}>
                       {isOpen?"閉じる":"⚙️ カテゴリ"}
                     </button>
                   </div>
@@ -1911,21 +1913,21 @@ function App() {
                           {editingCatIdx===idx ? (
                             <>
                               <input style={{...S.formInput,flex:1,fontSize:12,padding:"4px 7px"}} value={editingCatName} onChange={e=>setEditingCatName(e.target.value)}/>
-                              <button style={{...S.btnPrimary,padding:"4px 8px",fontSize:11}} onClick={()=>renamePriceCategory(v,idx,editingCatName)}>確定</button>
-                              <button style={{...S.btnGhost,padding:"4px 6px",fontSize:11}} onClick={()=>{ setEditingCatIdx(null); setEditingCatName(""); }}>×</button>
+                              <button type="button" style={{...S.btnPrimary,padding:"4px 8px",fontSize:11}} onClick={()=>renamePriceCategory(v,idx,editingCatName)}>確定</button>
+                              <button type="button" style={{...S.btnGhost,padding:"4px 6px",fontSize:11}} onClick={()=>{ setEditingCatIdx(null); setEditingCatName(""); }}>×</button>
                             </>
                           ):(
                             <>
                               <span style={{flex:1,fontSize:13,fontWeight:600}}>{cat}</span>
-                              <button style={{fontSize:11,color:"#007aff",background:"none",border:"none",cursor:"pointer"}} onClick={()=>{ setEditingCatIdx(idx); setEditingCatName(cat); }}>編集</button>
-                              <button style={S.delBtn} onClick={()=>deletePriceCategory(v,idx)}>✕</button>
+                              <button type="button" style={{fontSize:11,color:"#007aff",background:"none",border:"none",cursor:"pointer"}} onClick={()=>{ setEditingCatIdx(idx); setEditingCatName(cat); }}>編集</button>
+                              <button type="button" style={S.delBtn} onClick={()=>deletePriceCategory(v,idx)}>✕</button>
                             </>
                           )}
                         </div>
                       ))}
                       <div style={{display:"flex",gap:6,marginTop:8}}>
                         <input style={{...S.formInput,flex:1,fontSize:12}} value={newCatName} onChange={e=>setNewCatName(e.target.value)} placeholder="カテゴリを追加"/>
-                        <button style={{...S.btnPrimary,padding:"6px 10px",fontSize:12}} onClick={()=>addPriceCategory(v)}>追加</button>
+                        <button type="button" style={{...S.btnPrimary,padding:"6px 10px",fontSize:12}} onClick={()=>addPriceCategory(v)}>追加</button>
                       </div>
                     </div>
                   )}
@@ -1940,7 +1942,7 @@ function App() {
                         <span style={{fontSize:11,color:"#8e8e93",minWidth:52}}>¥{current.toLocaleString()}</span>
                         <input style={{...S.formInput,flex:1,fontSize:13,padding:"6px 8px"}} type="number" placeholder="単価"
                           value={editingPrice[key]||""} onChange={e=>setEditingPrice(p=>({...p,[key]:e.target.value}))}/>
-                        <button style={{...S.btnPrimary,padding:"6px 10px",fontSize:12}} onClick={()=>{
+                        <button type="button" style={{...S.btnPrimary,padding:"6px 10px",fontSize:12}} onClick={()=>{
                           const prices=data.unitPrices||{};
                           const vmap=prices[v]||{};
                           updateData({...data, unitPrices:{...prices,[v]:{...vmap,[cat]:Number(editingPrice[key]||0)}}});
@@ -1969,13 +1971,13 @@ function MemberManager({ vendorId, members, onAdd, onDelete }) {
     <div>
       <div style={{display:"flex",gap:8,marginBottom:12}}>
         <input style={{...S.formInput,flex:1}} value={newName} onChange={e=>setNewName(e.target.value)} placeholder="メンバー名を入力"/>
-        <button style={S.btnPrimary} onClick={()=>{ onAdd(newName); setNewName(""); }}>追加</button>
+        <button type="button" style={S.btnPrimary} onClick={()=>{ onAdd(newName); setNewName(""); }}>追加</button>
       </div>
       {members.length===0&&<div style={S.empty}>メンバー未登録</div>}
       {members.map(m=>(
         <div key={m} style={{...S.reqCard,borderLeftColor:"#007aff",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
           <span style={{fontSize:15,fontWeight:600,color:"#1c1c1e"}}>👤 {m}</span>
-          <button style={S.delBtn} onClick={()=>onDelete(m)}>✕</button>
+          <button type="button" style={S.delBtn} onClick={()=>onDelete(m)}>✕</button>
         </div>
       ))}
     </div>
