@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0"/>
+<title>データ移行ツール</title>
+<style>
+* { box-sizing: border-box; }
+body { margin: 0; padding: 20px; background: #f7f7f8; font-family: -apple-system, 'Hiragino Sans', sans-serif; }
+h1 { font-size: 18px; font-weight: 500; color: #1a1a1a; margin-bottom: 4px; }
+p { font-size: 12px; color: #888; margin: 0 0 20px; }
+.card { background: #fff; border-radius: 12px; padding: 16px; margin-bottom: 12px; box-shadow: 0 1px 4px rgba(0,0,0,0.06); }
+.label { font-size: 11px; color: #aaa; margin-bottom: 4px; letter-spacing: 0.08em; }
+.status { font-size: 13px; color: #1a1a1a; margin-top: 8px; padding: 10px; background: #f5f5f5; border-radius: 8px; min-height: 48px; white-space: pre-wrap; word-break: break-all; }
+button { width: 100%; padding: 14px; background: #1a1a1a; color: #fff; border: none; border-radius: 8px; font-size: 15px; cursor: pointer; margin-top: 8px; font-family: inherit; }
+button:disabled { opacity: 0.5; }
+.ok { color: #2d9e6b; font-weight: 600; }
+.err { color: #ff3b30; font-weight: 600; }
+</style>
+</head>
+<body>
+<h1>データ移行ツール</h1>
+<p>JSONBin → Firebase Realtime Database</p>
+
+<div class="card">
+  <div class="label">STEP 1：JSONBinからデータ取得</div>
+  <button id="btn1" onclick="fetchFromJsonBin()">JSONBinからデータを取得</button>
+  <div class="status" id="status1">待機中…</div>
+</div>
+
+<div class="card">
+  <div class="label">STEP 2：Firebaseへデータ送信</div>
+  <button id="btn2" onclick="pushToFirebase()" disabled>Firebaseへ送信</button>
+  <div class="status" id="status2">STEP 1を先に実行してください</div>
+</div>
+
+<div class="card">
+  <div class="label">STEP 3：確認</div>
+  <button onclick="verifyFirebase()">Firebaseのデータを確認</button>
+  <div class="status" id="status3">送信後に確認してください</div>
+</div>
+
+<script>
+const JSONBIN_URL = "https://api.jsonbin.io/v3/b/6a23a553f5f4af5e29c12fb2/latest";
+const JSONBIN_KEY = "$2a$10$1O88cF7wXbf2pSTZZxqBr.uqcIg5ILcQf9fGrbZmJyf780h0jIqq.";
+const FIREBASE_URL = "https://niage-management-default-rtdb.firebaseio.com/niage_app.json";
+
+let migratedData = null;
+
+async function fetchFromJsonBin() {
+  const btn = document.getElementById("btn1");
+  const status = document.getElementById("status1");
+  btn.disabled = true;
+  status.textContent = "取得中…";
+  try {
+    const res = await fetch(JSONBIN_URL, {
+      headers: { "X-Master-Key": JSONBIN_KEY }
+    });
+    if(!res.ok) throw new Error(`HTTP ${res.status}`);
+    const json = await res.json();
+    migratedData = json.record;
+    const reqCount = migratedData.requests ? migratedData.requests.length : 0;
+    status.innerHTML = `<span class="ok">✓ 取得成功！</span>\n予定件数：${reqCount}件\nデータサイズ：${JSON.stringify(migratedData).length.toLocaleString()} bytes`;
+    document.getElementById("btn2").disabled = false;
+  } catch(e) {
+    status.innerHTML = `<span class="err">✕ 取得失敗：${e.message}</span>`;
+    btn.disabled = false;
+  }
+}
+
+async function pushToFirebase() {
+  if(!migratedData) { alert("先にSTEP 1を実行してください"); return; }
+  const btn = document.getElementById("btn2");
+  const status = document.getElementById("status2");
+  btn.disabled = true;
+  status.textContent = "送信中…";
+  try {
+    const res = await fetch(FIREBASE_URL, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(migratedData)
+    });
+    if(!res.ok) throw new Error(`HTTP ${res.status}`);
+    await res.json();
+    status.innerHTML = `<span class="ok">✓ 送信成功！\nFirebaseへの移行が完了しました。\n\n次はアプリのindex.htmlをFirebase版に更新してください。</span>`;
+  } catch(e) {
+    status.innerHTML = `<span class="err">✕ 送信失敗：${e.message}</span>`;
+    btn.disabled = false;
+  }
+}
+
+async function verifyFirebase() {
+  const status = document.getElementById("status3");
+  status.textContent = "確認中…";
+  try {
+    const res = await fetch(FIREBASE_URL);
+    if(!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    const reqCount = data && data.requests ? data.requests.length : 0;
+    status.innerHTML = `<span class="ok">✓ Firebase確認OK！</span>\n予定件数：${reqCount}件\nデータサイズ：${JSON.stringify(data).length.toLocaleString()} bytes`;
+  } catch(e) {
+    status.innerHTML = `<span class="err">✕ 確認失敗：${e.message}</span>`;
+  }
+}
+</script>
+</body>
+</html>
