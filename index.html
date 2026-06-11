@@ -39,8 +39,7 @@ const TSUBO_OPTIONS = ["","30坪未満","30坪","35坪","40坪","45坪","50坪",
 const PRICE_CATEGORIES_DEFAULT = [];
 const MANAGER_PASS = "0228";
 const GYOMU_PASS = "0228";
-const API_KEY = "$2a$10$1O88cF7wXbf2pSTZZxqBr.uqcIg5ILcQf9fGrbZmJyf780h0jIqq.";
-const JSONBIN_BASE = "https://api.jsonbin.io/v3";
+const FIREBASE_DB_URL = "https://niage-management-default-rtdb.firebaseio.com/niage_app.json";
 const STORAGE_KEY = "荷揚げv6";
 const PRICE_CAT_KEY = "荷揚げ_vendorPriceCategories";
 function loadVendorPriceCategories() {
@@ -66,30 +65,24 @@ function loadVendorPasses() {
 function saveVendorPasses(p) { localStorage.setItem(VENDOR_PASSES_KEY, JSON.stringify(p)); }
 function getVendorPass(passes, vendorName) { return passes[vendorName] || "0000"; }
 const BIN_STORAGE_KEY = "荷揚げ_binid";
-const DEFAULT_BIN_ID = "6a23a553f5f4af5e29c12fb2";
+
 const VENDORS_STORAGE_KEY = "荷揚げ_vendors";
 const NAMES_STORAGE_KEY = "荷揚げ_names";
 
 // ── JSONBin API ───────────────────────────────────
-async function fetchBin(binId) {
-  const res = await fetch(`${JSONBIN_BASE}/b/${binId}/latest`, { headers: { "X-Master-Key": API_KEY } });
+async function fetchFirebase() {
+  const res = await fetch(FIREBASE_DB_URL);
   if (!res.ok) throw new Error("fetch failed");
-  return (await res.json()).record;
+  const data = await res.json();
+  return data;
 }
-async function updateBin(binId, data) {
-  const res = await fetch(`${JSONBIN_BASE}/b/${binId}`, {
-    method: "PUT", headers: { "Content-Type": "application/json", "X-Master-Key": API_KEY },
+async function updateFirebase(data) {
+  const res = await fetch(FIREBASE_DB_URL, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify(data)
   });
   if (!res.ok) throw new Error("update failed");
-}
-async function createBin(data) {
-  const res = await fetch(`${JSONBIN_BASE}/b`, {
-    method: "POST", headers: { "Content-Type": "application/json", "X-Master-Key": API_KEY, "X-Bin-Name": "荷揚げ管理" },
-    body: JSON.stringify(data)
-  });
-  if (!res.ok) throw new Error("create failed");
-  return (await res.json()).metadata.id;
 }
 
 // ── ローカルストレージ ────────────────────────────
@@ -1248,14 +1241,7 @@ function App() {
   const [splitInputs, setSplitInputs] = useState({});
   const [toast, setToast] = useState(""); const [toastType, setToastType] = useState("ok");
   const [syncing, setSyncing] = useState(false); const [syncOk, setSyncOk] = useState(false);
-  const [binId, setBinId] = useState(()=>{
-    const saved = localStorage.getItem(BIN_STORAGE_KEY);
-    if(!saved) {
-      localStorage.setItem(BIN_STORAGE_KEY, DEFAULT_BIN_ID);
-      return DEFAULT_BIN_ID;
-    }
-    return saved;
-  });
+  const binId = "firebase"; // Firebase固定
   const [vendorEditMode, setVendorEditMode] = useState(false);
   const [vendorPriceCategories, setVendorPriceCategories] = useState(loadVendorPriceCategories);
   const [selectedCatVendor, setSelectedCatVendor] = useState(null);
@@ -1283,16 +1269,15 @@ function App() {
   useEffect(()=>{ saveLocal(data); },[data]);
   useEffect(()=>{ saveVendors(vendors); },[vendors]);
   useEffect(()=>{ if(toast){const t=setTimeout(()=>setToast(""),2500);return()=>clearTimeout(t);} },[toast]);
-  useEffect(()=>{ if(binId) pullFromCloud(binId); },[]);
+  useEffect(()=>{ pullFromCloud(); },[]);
 
   const showToast=(m,type="ok")=>{ setToast(m); setToastType(type); };
 
-  const pullFromCloud = async (id) => {
-    if(!id) return; setSyncing(true); setSyncOk(false);
+  const pullFromCloud = async () => {
+    setSyncing(true); setSyncOk(false);
     try {
-      const r=await fetchBin(id);
+      const r = await fetchFirebase();
       if(r&&r.requests){
-        // 不足フィールドを補完
         if(!r.vendorMembers||Object.keys(r.vendorMembers).length===0) r.vendorMembers=DEFAULT_VENDOR_MEMBERS;
         if(!r.vendorAmounts) r.vendorAmounts={};
         if(!r.memberAssignments) r.memberAssignments={};
@@ -1304,19 +1289,15 @@ function App() {
     }
     catch { showToast("取得失敗","err"); } finally { setSyncing(false); }
   };
-  const pushToCloud = async (nd,id) => {
-    const tid=id||binId; if(!tid) return; setSyncing(true);
-    try { await updateBin(tid,nd); setSyncOk(true); }
+  const pushToCloud = async (nd) => {
+    setSyncing(true);
+    try { await updateFirebase(nd); setSyncOk(true); }
     catch { showToast("クラウドに登録中…"); } finally { setSyncing(false); }
   };
-  const setupCloud = async () => {
-    setSyncing(true);
-    try { const id=await createBin(data); setBinId(id); localStorage.setItem(BIN_STORAGE_KEY,id); setSyncOk(true); showToast("クラウド連携完了"); }
-    catch { showToast("設定失敗","err"); } finally { setSyncing(false); }
-  };
+  // Firebase固定のためsetupCloud不要
   const updateData = async (nd) => {
     setData(nd); saveLocal(nd);
-    if(binId){ clearTimeout(syncTimer.current); syncTimer.current=setTimeout(()=>pushToCloud(nd,binId),800); }
+    clearTimeout(syncTimer.current); syncTimer.current=setTimeout(()=>pushToCloud(nd),800);
   };
 
   // ── データ操作 ──
@@ -1570,22 +1551,13 @@ function App() {
 
         <div style={{width:"100%",maxWidth:360,marginBottom:24}}>
           <div style={{fontSize:11,color:"#888",marginBottom:10,textAlign:"center"}}>
-            {binId?"● クラウド連携済み":"● クラウド未設定"}
+            ● Firebase接続済み
           </div>
-          {!binId&&(
-            <div
-              style={{display:"block",width:"100%",padding:"16px",background:"#1a1a1a",color:"#fff",borderRadius:8,fontSize:15,textAlign:"center",WebkitUserSelect:"none"}}
-              onClick={()=>setupCloud()}>
-              初期設定する
-            </div>
-          )}
-          {binId&&(
-            <div
-              style={{display:"block",width:"100%",padding:"16px",background:"#1a1a1a",color:"#fff",borderRadius:8,fontSize:15,textAlign:"center",WebkitUserSelect:"none"}}
-              onClick={()=>pullFromCloud(binId)}>
-              {syncing?"取得中…":"↻ 最新データを取得"}
-            </div>
-          )}
+          <div
+            style={{display:"block",width:"100%",padding:"16px",background:"#1a1a1a",color:"#fff",borderRadius:8,fontSize:15,textAlign:"center",WebkitUserSelect:"none"}}
+            onClick={()=>pullFromCloud()}>
+            {syncing?"取得中…":"↻ 最新データを取得"}
+          </div>
         </div>
 
         <div style={{width:"100%",maxWidth:360,display:"flex",flexDirection:"column",gap:10}}>
@@ -1780,7 +1752,7 @@ function App() {
         {/* ── カレンダー（担当者・管理者・業者） ── */}
         {view==="calendar"&&role!=="業務"&&(
           <div>
-            <button type="button" style={S.refreshBtn} onClick={()=>pullFromCloud(binId)} disabled={syncing}>
+            <button type="button" style={S.refreshBtn} onClick={()=>pullFromCloud()} disabled={syncing}>
               {syncing?"取得中…":"↻ 最新データを取得"}
             </button>
             <CalendarView
@@ -1881,7 +1853,7 @@ function App() {
             vendorColor={vendorColor}
             vendorBg={vendorBg}
             dayOfWeek={dayOfWeek}
-            onRefresh={()=>pullFromCloud(binId)}
+            onRefresh={()=>pullFromCloud()}
             syncing={syncing}
           />
         )}
@@ -1889,7 +1861,7 @@ function App() {
         {/* ── 業者調整 ── */}
         {view==="adjust"&&role==="管理者"&&(
           <div>
-            <button type="button" style={S.refreshBtn} onClick={()=>pullFromCloud(binId)} disabled={syncing}>
+            <button type="button" style={S.refreshBtn} onClick={()=>pullFromCloud()} disabled={syncing}>
               {syncing?"取得中…":"↻ 最新データを取得"}
             </button>
 
@@ -2101,7 +2073,7 @@ function App() {
         {/* ── 業務モード：実績一覧 ── */}
         {view==="list"&&role==="業務"&&(
           <div>
-            <button type="button" style={S.refreshBtn} onClick={()=>pullFromCloud(binId)} disabled={syncing}>
+            <button type="button" style={S.refreshBtn} onClick={()=>pullFromCloud()} disabled={syncing}>
               {syncing?"取得中…":"↻ 最新データを取得"}
             </button>
             {/* 期間選択 */}
@@ -2177,7 +2149,7 @@ function App() {
         {/* ── 業務モード：発注一覧 ── */}
         {view==="order"&&role==="業務"&&(
           <div>
-            <button type="button" style={S.refreshBtn} onClick={()=>pullFromCloud(binId)} disabled={syncing}>
+            <button type="button" style={S.refreshBtn} onClick={()=>pullFromCloud()} disabled={syncing}>
               {syncing?"取得中…":"↻ 最新データを取得"}
             </button>
             <OrderListView
